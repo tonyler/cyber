@@ -1,0 +1,75 @@
+#!/bin/bash
+# Check status of all Cybernetics services
+
+echo "========================================"
+echo "Cybernetics System Status"
+echo "========================================"
+echo ""
+
+LOGS_DIR="/root/cyber/logs"
+
+# Check Bot
+echo "Discord Bot:"
+if [ -f "$LOGS_DIR/bot.pid" ]; then
+    BOT_PID=$(cat "$LOGS_DIR/bot.pid")
+    if ps -p "$BOT_PID" > /dev/null 2>&1; then
+        echo "  ✅ Running (PID: $BOT_PID)"
+        echo "  Log: $LOGS_DIR/bot.log"
+    else
+        echo "  ❌ Not running (stale PID file)"
+    fi
+else
+    echo "  ❌ Not running (no PID file)"
+fi
+
+echo ""
+
+# Check Scrapers
+echo "Scrapers Daemon:"
+if [ -f "$LOGS_DIR/scrapers.pid" ]; then
+    SCRAPERS_PID=$(cat "$LOGS_DIR/scrapers.pid")
+    if ps -p "$SCRAPERS_PID" > /dev/null 2>&1; then
+        echo "  ✅ Running (PID: $SCRAPERS_PID)"
+        echo "  Log: $LOGS_DIR/scrapers.log"
+    else
+        echo "  ❌ Not running (stale PID file)"
+    fi
+else
+    echo "  ❌ Not running (no PID file)"
+fi
+
+echo ""
+
+# Check Dashboard
+echo "Dashboard:"
+if [ -f "$LOGS_DIR/dashboard.pid" ]; then
+    DASH_PID=$(cat "$LOGS_DIR/dashboard.pid")
+    if ps -p "$DASH_PID" > /dev/null 2>&1; then
+        echo "  ✅ Running (PID: $DASH_PID)"
+        echo "  URL: http://localhost:5002"
+        echo "  Log: $LOGS_DIR/dashboard.log"
+    else
+        echo "  ❌ Not running (stale PID file)"
+    fi
+else
+    echo "  ⚠️  Not configured"
+fi
+
+echo ""
+
+# Check Sync Daemon
+echo "Sync Daemon:"
+if [ -f "$LOGS_DIR/sync_daemon.pid" ]; then
+    SYNC_PID=$(cat "$LOGS_DIR/sync_daemon.pid")
+    if ps -p "$SYNC_PID" > /dev/null 2>&1; then
+        echo "  ✅ Running (PID: $SYNC_PID)"
+        echo "  Log: $LOGS_DIR/sync_daemon.log"
+    else
+        echo "  ❌ Not running (stale PID file)"
+    fi
+else
+    echo "  ⚠️  Not configured"
+fi
+
+echo ""
+echo "========================================"

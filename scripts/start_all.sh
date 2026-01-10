@@ -1,0 +1,98 @@
+#!/bin/bash
+# Start full Cybernetics stack: dashboard, sync daemon, Discord bot, scrapers.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+LOGS_DIR="$PROJECT_ROOT/logs"
+CHROME_DRIVER_DEFAULT="/root/.wdm/drivers/chromedriver/linux64/143.0.7499.169/chromedriver-linux64/chromedriver"
+
+log_warn() {
+    echo "⚠️  $1"
+}
+
+mkdir -p "$LOGS_DIR"
+
+echo "========================================"
+echo "Starting Full Cybernetics Stack"
+echo "========================================"
+
+# Start dashboard + sync daemon (system script)
+if [ -f "$SCRIPT_DIR/start_cybernetics.sh" ]; then
+    if ! bash "$SCRIPT_DIR/start_cybernetics.sh"; then
+        log_warn "Cybernetics core failed to start; continuing with remaining services."
+    fi
+else
+    log_warn "Missing start_cybernetics.sh; skipping core services."
+fi
+
+echo ""
+echo "Starting Discord Bot..."
+if [ -f "$LOGS_DIR/bot.pid" ]; then
+    BOT_PID="$(cat "$LOGS_DIR/bot.pid")"
+    if ps -p "$BOT_PID" > /dev/null 2>&1; then
+        echo "✅ Bot already running (PID: $BOT_PID)"
+    else
+        rm -f "$LOGS_DIR/bot.pid"
+    fi
+fi
+
+if [ ! -f "$LOGS_DIR/bot.pid" ]; then
+    if [ ! -f "$PROJECT_ROOT/bot/start.sh" ] || [ ! -f "$PROJECT_ROOT/bot/bot.py" ]; then
+        log_warn "Bot entrypoint missing; skipping Discord bot."
+    elif [ ! -f "$PROJECT_ROOT/bot/.env" ]; then
+        log_warn "Bot .env missing; skipping Discord bot."
+    elif [ ! -f "$PROJECT_ROOT/shared/credentials/google.json" ]; then
+        log_warn "Google credentials missing at $PROJECT_ROOT/shared/credentials/google.json; skipping Discord bot."
+    else
+        if [ ! -f "$PROJECT_ROOT/bot/requirements.txt" ]; then
+            log_warn "Bot requirements.txt missing; attempting to start with existing environment."
+        fi
+        nohup bash "$PROJECT_ROOT/bot/start.sh" > "$LOGS_DIR/bot.log" 2>&1 &
+        BOT_PID=$!
+        echo "$BOT_PID" > "$LOGS_DIR/bot.pid"
+        echo "✅ Bot started (PID: $BOT_PID)"
+        echo "Logs: $LOGS_DIR/bot.log"
+    fi
+fi
+
+echo ""
+echo "Starting Scrapers (X + Reddit) every 30 minutes..."
+if [ -f "$LOGS_DIR/scrapers.pid" ]; then
+    SCRAPERS_PID="$(cat "$LOGS_DIR/scrapers.pid")"
+    if ps -p "$SCRAPERS_PID" > /dev/null 2>&1; then
+        echo "✅ Scrapers already running (PID: $SCRAPERS_PID)"
+    else
+        rm -f "$LOGS_DIR/scrapers.pid"
+    fi
+fi
+
+if [ ! -f "$LOGS_DIR/scrapers.pid" ]; then
+    if [ ! -f "$PROJECT_ROOT/scripts/scraper_daemon.sh" ]; then
+        log_warn "Scraper daemon script missing; skipping scrapers."
+    else
+        export CHROMEDRIVER_PATH="${CHROMEDRIVER_PATH:-$CHROME_DRIVER_DEFAULT}"
+        if [ ! -x "$CHROMEDRIVER_PATH" ]; then
+            log_warn "CHROMEDRIVER_PATH not executable: $CHROMEDRIVER_PATH"
+            log_warn "Set CHROMEDRIVER_PATH to a valid ChromeDriver to run scrapers."
+        else
+            nohup bash "$PROJECT_ROOT/scripts/scraper_daemon.sh" > "$LOGS_DIR/scrapers.log" 2>&1 &
+            SCRAPERS_PID=$!
+            echo "$SCRAPERS_PID" > "$LOGS_DIR/scrapers.pid"
+            echo "✅ Scraper daemon started (PID: $SCRAPERS_PID)"
+            echo "Logs: $LOGS_DIR/scrapers.log"
+        fi
+    fi
+fi
+
+echo ""
+echo "========================================"
+echo "✅ Full stack started"
+echo "========================================"
+echo "Dashboard URL: http://localhost:5002"
+echo "Logs:"
+echo "  Sync: $LOGS_DIR/sync_daemon.log"
+echo "  Dashboard: $LOGS_DIR/dashboard.log"
+echo "  Bot: $LOGS_DIR/bot.log"
+echo "  Scrapers: $LOGS_DIR/scrapers.log"

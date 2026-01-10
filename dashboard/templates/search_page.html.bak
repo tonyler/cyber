@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}cosmos labs <> Cybernetics{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Page Header -->
+    <div class="page-header" data-animate="fade-in">
+        <div class="header-content">
+            <div class="header-text">
+                <h1 class="page-title">
+                    <span class="title-bracket">[</span>
+                    MEMBER SEARCH
+                    <span class="title-bracket">]</span>
+                </h1>
+                <p class="page-subtitle">Search registered cybernetics and view their contributions</p>
+            </div>
+            <div class="month-selector-panel">
+                <form id="monthForm" method="GET" action="{{ url_for('search_page') }}">
+                    <div class="selector-wrapper">
+                        <label for="monthSelect" class="selector-label">
+                            <svg class="selector-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/>
+                            </svg>
+                            <span>TIME PERIOD</span>
+                        </label>
+                        <div class="selector-container" id="selectContainer">
+                            <select id="monthSelect" class="selector-input" name="month" required>
+                                <option value="{{ selected_month }}" selected data-year="{{ selected_year }}">
+                                    {{ selected_month|month_name }} {{ selected_year }}
+                                </option>
+                                {% for year, month in available_months %}
+                                    {% if not (year == selected_year and month == selected_month) %}
+                                        <option value="{{ month }}" data-year="{{ year }}">{{ month|month_name }} {{ year }}</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <input id="yearInput" type="hidden" name="year" value="{{ selected_year }}">
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="header-line"></div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-container" data-animate="fade-in" style="animation-delay: 100ms">
+        <div class="search-wrapper">
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+            </svg>
+            <input type="text" id="searchInput" class="search-input" placeholder="Search by X handle or Discord username...">
+        </div>
+    </div>
+
+    <!-- Members List View -->
+    <div id="membersListView" class="terminal-section" data-animate="fade-in" style="animation-delay: 200ms">
+        <div class="terminal-header">
+            <span class="terminal-prompt">root@cybernetics:~$</span>
+            <span class="terminal-command">list_members --month={{ year_month }} --sort=contributions</span>
+        </div>
+
+        {% if members %}
+        <div class="terminal-body">
+            <div class="terminal-output">
+                <!-- Column Headers -->
+                <div class="terminal-row terminal-row-header members-grid">
+                    <span class="term-col">#</span>
+                    <span class="term-col">X HANDLE</span>
+                    <span class="term-col">QUOTES</span>
+                    <span class="term-col">COMMENTS</span>
+                    <span class="term-col">RETWEETS</span>
+                </div>
+
+                <!-- Data Rows -->
+                {% for member in members %}
+                <div class="terminal-row members-grid member-row"
+                     data-animate="slide-up"
+                     style="animation-delay: {{ loop.index0 * 5 }}ms"
+                     data-discord-user="{{ member.discord_user }}"
+                     onclick="loadMemberDetails('{{ member.discord_user }}', '{{ year_month }}')">
+                    <span class="term-col">
+                        <span class="rank-badge">{{ "%02d"|format(loop.index) }}</span>
+                    </span>
+                    <span class="term-col">
+                        <span class="user-name">{{ member.x_handle | default(member.discord_user) }}</span>
+                    </span>
+                    <span class="term-col">
+                        <span class="metric-value">{{ member.quote_count }}</span>
+                    </span>
+                    <span class="term-col">
+                        <span class="metric-value">{{ member.comment_count }}</span>
+                    </span>
+                    <span class="term-col">
+                        <span class="metric-value">{{ member.retweet_count }}</span>
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="terminal-scanline"></div>
+        </div>
+
+        <div class="terminal-footer">
+            <span class="terminal-status">
+                <span class="status-dot"></span>
+                <span id="memberCount">{{ members|length }}</span> members loaded
+            </span>
+        </div>
+        {% else %}
+        <div class="terminal-body">
+            <div class="terminal-output">
+                <div class="terminal-row members-grid">
+                    <span class="term-col" style="color: var(--red-orange)">ERROR: No members found for this period</span>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Member Detail View (Hidden by default) -->
+    <div id="memberDetailView" class="terminal-section history-minimal history-terminal" style="display: none;" data-animate="fade-in">
+        <div class="terminal-header">
+            <button class="back-button" onclick="showMembersList()">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 20px; height: 20px;">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                </svg>
+                Back to List
+            </button>
+            <span class="terminal-prompt">root@cybernetics:~$</span>
+            <span class="terminal-command" id="detailCommand">view_member_activity</span>
+        </div>
+
+        <div class="terminal-body">
+            <div id="detailContent" class="terminal-output">
+                <!-- Content will be loaded dynamically -->
+            </div>
+            <div class="terminal-scanline"></div>
+        </div>
+
+        <div class="terminal-footer">
+            <span class="terminal-status">
+                <span class="status-dot"></span>
+                <span id="detailStatus">Loading...</span>
+            </span>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Search Container Styles */
+.search-container {
+    margin: 2rem 0;
+}
+
+.search-wrapper {
+    position: relative;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+.search-icon {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    color: var(--cyber-blue);
+    opacity: 0.6;
+}
+
+.search-input {
+    width: 100%;
+    padding: 1rem 1rem 1rem 3rem;
+    background: rgba(0, 20, 40, 0.6);
+    border: 1px solid rgba(0, 191, 255, 0.3);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--cyber-blue);
+    box-shadow: 0 0 20px rgba(0, 191, 255, 0.2);
+}
+
+.search-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Members Grid Layout */
+.members-grid {
+    display: grid;
+    grid-template-columns: 60px 2fr 1fr 1fr 1fr;
+    gap: 1rem;
+    align-items: center;

@@ -1,0 +1,220 @@
+/*
+ * Reusable Components
+ * Stats panels, charts, forms, alerts
+ */
+
+/* Page Header */
+.page-header {
+  margin-bottom: var(--space-xl);
+  position: relative;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-xl);
+  margin-bottom: var(--space-md);
+}
+
+.header-text {
+  flex: 1;
+}
+
+.page-title {
+  font-family: var(--font-heading);
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  text-shadow: 0 0 30px rgba(0, 240, 255, 0.4);
+  margin: 0 0 var(--space-sm) 0;
+  line-height: 1.2;
+}
+
+.title-bracket {
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+.page-subtitle {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.header-line {
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    var(--cyan) 0%,
+    var(--purple-neon) 50%,
+    transparent 100%
+  );
+  box-shadow: var(--glow-cyan);
+}
+
+/* Statistics Dashboard */
+.stats-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.stats-dashboard.history-stats {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+  gap: var(--space-lg);
+}
+
+.stat-panel {
+  position: relative;
+  padding: var(--space-lg);
+  background: linear-gradient(
+    135deg,
+    rgba(13, 17, 23, 0.8) 0%,
+    rgba(26, 31, 53, 0.6) 100%
+  );
+  border: var(--border-thin) solid transparent;
+  overflow: hidden;
+  transition: all var(--duration-normal) var(--ease-default);
+}
+
+.stat-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: var(--border-thin);
+  background: linear-gradient(
+    135deg,
+    var(--cyan) 0%,
+    var(--purple-neon) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box,
+                 linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.5;
+  transition: opacity var(--duration-normal) var(--ease-default);
+}
+
+.stat-panel:hover::before {
+  opacity: 1;
+}
+
+.stat-panel::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle,
+    rgba(0, 240, 255, 0.1) 0%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity var(--duration-slow) var(--ease-default);
+}
+
+.stat-panel:hover::after {
+  opacity: 1;
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.stat-label {
+  font-family: var(--font-subheading);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  color: var(--cyan);
+  text-transform: uppercase;
+}
+
+.stat-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--cyan);
+  filter: drop-shadow(var(--glow-cyan));
+}
+
+.stat-value {
+  margin-bottom: var(--space-sm);
+}
+
+.value-number {
+  font-family: var(--font-mono);
+  font-size: 2.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+  line-height: 1;
+}
+
+.stat-glow {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--cyan) 50%,
+    transparent 100%
+  );
+  opacity: 0;
+  transition: opacity var(--duration-normal) var(--ease-default);
+}
+
+.stat-panel:hover .stat-glow {
+  opacity: 1;
+}
+
+/* Chart Panel */
+.chart-panel {
+  position: relative;
+  background: rgba(0, 0, 0, 0.4);
+  border: var(--border-thin) solid var(--cyan);
+  box-shadow: var(--glow-cyan);
+  margin-bottom: var(--space-xl);
+  overflow: hidden;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(0, 240, 255, 0.05);
+  border-bottom: var(--border-thin) solid var(--cyan);
+}
+
+.chart-title {
+  font-family: var(--font-subheading);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: 0;
+}
+
+.title-icon {
+  color: var(--mint);
+  font-size: 0.75rem;
+}
+
+.chart-meta {

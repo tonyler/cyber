@@ -1,0 +1,19 @@
+# Discord Bot
+discord.py>=2.3.0
+python-dotenv>=1.0.0
+
+# Google Sheets Integration
+gspread>=5.12.0
+oauth2client>=4.1.3
+
+# Web Scraping
+playwright>=1.40.0
+
+# Database
+# sqlite3 is built into Python
+
+# Web Framework
+Flask>=3.0.0
+
+# Utilities
+requests>=2.31.0

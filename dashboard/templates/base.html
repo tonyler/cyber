@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <meta name="theme-color" content="#0a0e27">
+    <title>{% block title %}CYBERNETICS HUD{% endblock %}</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=200">
+</head>
+<body>
+    <!-- Cyber Grid Background -->
+    <div class="cyber-grid"></div>
+
+    <!-- Navigation -->
+    <nav class="cyber-nav" id="cyberNav">
+        <div class="container">
+            <div class="nav-content">
+                <a href="{{ url_for('index') }}" class="nav-brand">
+                    CYBERNETICS<span class="brand-dot">.</span>
+                </a>
+
+                <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
+                    <span class="toggle-line"></span>
+                    <span class="toggle-line"></span>
+                    <span class="toggle-line"></span>
+                </button>
+
+                <div class="nav-links" id="navLinks">
+                    <a href="{{ url_for('content_page') }}"
+                       class="nav-link {% if request.endpoint == 'content_page' %}active{% endif %}">
+                        CONTENT
+                    </a>
+                    <a href="{{ url_for('history_page') }}"
+                       class="nav-link {% if request.endpoint == 'history_page' %}active{% endif %}">
+                        HISTORY
+                    </a>
+                    <a href="{{ url_for('search_page') }}"
+                       class="nav-link {% if request.endpoint == 'search_page' %}active{% endif %}">
+                        SEARCH
+                    </a>
+                </div>
+            </div>
+        </div>
+        <div class="nav-scanline"></div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container-fluid mt-xl mb-xl">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="cyber-footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-branding">
+                    <span class="footer-brand">CYBERNETICS</span>
+                    <span class="footer-separator">//</span>
+                    <span class="footer-subtitle">HUD INTERFACE</span>
+                </div>
+                <div class="footer-meta">
+                    <span class="footer-status">
+                        <span class="status-indicator"></span>
+                        ONLINE
+                    </span>
+                    {% if last_sync_time %}
+                    <span class="footer-separator">|</span>
+                    <span class="footer-sync">SYNC: {{ last_sync_time }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+
+    <!-- Custom Scripts -->
+    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/animations.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>
