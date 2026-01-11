@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(bash:*)",
+      "Bash(chmod:*)",
+      "Bash(netstat:*)",
+      "Bash(timeout 5 strace:*)",
+      "Bash(timeout 15 venv/bin/python:*)",
+      "Bash(lsof:*)",
+      "Bash(grep:*)",
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(playwright install:*)",
+      "Bash(/root/cyber/dashboard/venv/bin/python3:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)"
+    ]
+  }
+}

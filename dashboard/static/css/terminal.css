@@ -1,0 +1,199 @@
+/*
+ * Terminal-Style Leaderboards
+ * Command-line interface aesthetic
+ */
+
+.terminal-section {
+  background: rgba(0, 0, 0, 0.6);
+  border: var(--border-thin) solid var(--cyan);
+  box-shadow: var(--glow-cyan),
+              inset 0 0 100px rgba(0, 240, 255, 0.05);
+  margin-bottom: var(--space-xl);
+  overflow: hidden;
+  position: relative;
+}
+
+.terminal-header {
+  background: rgba(0, 240, 255, 0.05);
+  border-bottom: var(--border-thin) solid var(--cyan);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--cyan);
+}
+
+.terminal-prompt {
+  color: var(--mint);
+  margin-right: var(--space-sm);
+}
+
+.terminal-command {
+  color: var(--text-secondary);
+}
+
+.terminal-body {
+  position: relative;
+  padding: var(--space-md);
+  overflow-x: auto;
+}
+
+.terminal-output {
+  /* min-width removed - using 100% on mobile */
+}
+
+@media (min-width: 769px) {
+  .terminal-output {
+    min-width: 800px;
+  }
+}
+
+.terminal-row {
+  display: grid;
+  grid-template-columns: 60px 200px repeat(5, 1fr);
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+  transition: all var(--duration-fast) var(--ease-default);
+}
+
+.terminal-row:hover {
+  background: rgba(0, 240, 255, 0.05);
+  border-left: 2px solid var(--cyan);
+  padding-left: calc(var(--space-md) - 2px);
+  box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.1);
+}
+
+.terminal-row-header {
+  background: rgba(0, 240, 255, 0.08);
+  border-bottom: 2px solid var(--cyan);
+  font-weight: 600;
+  color: var(--cyan);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.75rem;
+}
+
+.terminal-row-header:hover {
+  background: rgba(0, 240, 255, 0.08);
+  border-left: none;
+  padding-left: var(--space-md);
+  box-shadow: none;
+}
+
+.terminal-row-highlight {
+  background: rgba(0, 255, 159, 0.08);
+  border-left: 2px solid var(--mint);
+  padding-left: calc(var(--space-md) - 2px);
+}
+
+.terminal-row-highlight:hover {
+  background: rgba(0, 255, 159, 0.12);
+  box-shadow: inset 0 0 20px rgba(0, 255, 159, 0.15);
+}
+
+.term-col {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+}
+
+.term-col.term-col-wrap {
+  align-items: flex-start;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid var(--cyan);
+  color: var(--cyan);
+  font-weight: 600;
+  clip-path: polygon(
+    10% 0%, 90% 0%, 100% 10%, 100% 90%, 90% 100%, 10% 100%, 0% 90%, 0% 10%
+  );
+}
+
+.user-name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.terminal-scanline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 240, 255, 0.03) 0px,
+    rgba(0, 240, 255, 0.03) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.terminal-footer {
+  background: rgba(0, 0, 0, 0.4);
+  border-top: var(--border-thin) solid rgba(0, 240, 255, 0.3);
+  padding: var(--space-xs) var(--space-md);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.terminal-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--mint);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--mint);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+/* Reddit-specific grid (6 columns) */
+.terminal-row.reddit-grid {
+  grid-template-columns: 60px 200px repeat(4, 1fr);
+}
+
+/* Removed history-grid - using default terminal-row now */
+
+/* Total page grid (5 columns) */
+.terminal-row.total-grid {
+  grid-template-columns: 60px 200px repeat(3, 1fr);
+}
+
+/* Target URL Links */
+.target-link {
+  color: var(--cyan);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(0, 240, 255, 0.3);
+  transition: all var(--duration-fast) var(--ease-default);
+  word-break: break-all;
+  cursor: pointer;
+}
+
+.target-link:hover {
+  color: var(--mint);
+  border-bottom-color: var(--mint);
+  text-shadow: 0 0 8px rgba(0, 255, 159, 0.6);
+  background: rgba(0, 255, 159, 0.05);
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 2px;
+}

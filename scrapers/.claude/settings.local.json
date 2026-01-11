@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m py_compile:*)",
+      "Bash(wc:*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(pkill:*)",
+      "Bash(tee:*)",
+      "Bash(playwright install:*)",
+      "Bash(timeout 120 python3:*)",
+      "Bash(timeout 180 python3:*)",
+      "Bash(timeout 30 python3:*)",
+      "Bash(timeout 240 python3:*)",
+      "Bash(python:*)"
+    ]
+  }
+}
