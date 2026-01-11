@@ -48,7 +48,7 @@ class MembersSyncService:
 
     def _sync_x_activity_log(self) -> int:
         try:
-            range_name = "'X Activity Log'!A:K"
+            range_name = "'X Activity Log'!A:I"
             rows = self._fetch_sheet_data(self.activity_history_sheet_id, range_name)
 
             activities = self.parser.parse_x_activity_log(rows)

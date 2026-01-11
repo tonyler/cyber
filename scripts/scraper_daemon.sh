@@ -5,12 +5,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+ROOT_VENV="$PROJECT_ROOT/venv"
 
-RUNNER="${PYTHON_BIN:-python3}"
+RUNNER="${PYTHON_BIN:-$ROOT_VENV/bin/python3}"
 SCRAPER_SCRIPT="$PROJECT_ROOT/scrapers/run_scrapers.py"
 INTERVAL_MINUTES="${SCRAPER_INTERVAL_MINUTES:-30}"
+PLAYWRIGHT_CACHE="${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"
 
-if ! command -v "$RUNNER" > /dev/null 2>&1; then
+if [ ! -x "$RUNNER" ] && ! command -v "$RUNNER" > /dev/null 2>&1; then
     echo "Error: $RUNNER not found in PATH."
     exit 1
 fi
@@ -23,6 +25,14 @@ fi
 if ! [[ "$INTERVAL_MINUTES" =~ ^[0-9]+$ ]] || [ "$INTERVAL_MINUTES" -le 0 ]; then
     echo "Error: SCRAPER_INTERVAL_MINUTES must be a positive integer."
     exit 1
+fi
+
+if [ ! -d "$PLAYWRIGHT_CACHE" ]; then
+    echo "Playwright browsers not found; installing Chromium..."
+    if ! "$RUNNER" -m playwright install chromium; then
+        echo "Error: Playwright browser install failed."
+        exit 1
+    fi
 fi
 
 sleep_seconds=$((INTERVAL_MINUTES * 60))

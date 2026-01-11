@@ -48,8 +48,6 @@ DEFAULT_X_ACTIVITY_FIELDS = [
     "activity_url",
     "target_url",
     "task_id",
-    "impressions",
-    "engagement",
     "notes",
 ]
 

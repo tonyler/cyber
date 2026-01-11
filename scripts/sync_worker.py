@@ -7,6 +7,8 @@ import sys
 import time
 import json
 import os
+import csv
+from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 
@@ -78,6 +80,120 @@ def _month_tab_to_year_month(month_tab: str) -> str:
         pass
     return datetime.utcnow().strftime("%Y-%m")
 
+def _month_tab_from_date(date_str: str, format_str: str) -> str:
+    if date_str:
+        for fmt in ("%Y-%m-%d", "%d/%m/%y", "%d/%m/%Y", "%m/%d/%Y"):
+            try:
+                dt = datetime.strptime(date_str.strip(), fmt)
+                if format_str == "MM/YYYY":
+                    return dt.strftime("%m/%Y")
+                return dt.strftime("%m/%y")
+            except ValueError:
+                continue
+    return _current_month_tab(format_str)
+
+def _load_x_activity_csv(csv_path: Path) -> list[dict]:
+    if not csv_path.exists():
+        logger.warning(f"X activity CSV not found at {csv_path}")
+        return []
+    rows = []
+    try:
+        with csv_path.open("r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row:
+                    rows.append(row)
+    except Exception as e:
+        logger.error(f"Failed to read X activity CSV: {e}")
+        return []
+    return rows
+
+def _ensure_activity_month_tab(spreadsheet, tab_name: str):
+    try:
+        return spreadsheet.worksheet(tab_name)
+    except Exception:
+        worksheet = spreadsheet.add_worksheet(title=tab_name, rows=2000, cols=23)
+        x_headers = [
+            "date",
+            "time",
+            "discord_user",
+            "x_handle",
+            "activity_type",
+            "activity_url",
+            "target_url",
+            "task_id",
+            "notes",
+        ]
+        reddit_headers = [
+            "date",
+            "time",
+            "discord_user",
+            "reddit_username",
+            "activity_type",
+            "activity_url",
+            "target_url",
+            "task_id",
+            "upvotes",
+            "comments",
+            "notes",
+        ]
+        worksheet.update("A1:I1", [x_headers])
+        worksheet.update("M1:W1", [reddit_headers])
+        return worksheet
+
+def _sync_x_activity_csv_to_sheet(activity_spreadsheet, month_tab_format: str, csv_path: Path) -> int:
+    rows = _load_x_activity_csv(csv_path)
+    if not rows:
+        return 0
+
+    rows_by_tab: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        tab = _month_tab_from_date(row.get("date", ""), month_tab_format)
+        rows_by_tab[tab].append(row)
+
+    total_inserted = 0
+    for tab_name, tab_rows in rows_by_tab.items():
+        worksheet = _ensure_activity_month_tab(activity_spreadsheet, tab_name)
+
+        try:
+            existing_urls = set()
+            url_col = worksheet.col_values(6)
+            for url in url_col[1:]:
+                url = url.strip() if url else ""
+                if url:
+                    existing_urls.add(url)
+        except Exception as e:
+            logger.warning(f"Failed to read existing URLs from {tab_name}: {e}")
+            existing_urls = set()
+
+        new_rows = []
+        for row in tab_rows:
+            activity_url = (row.get("activity_url") or "").strip()
+            if not activity_url or activity_url in existing_urls:
+                continue
+            new_rows.append([
+                row.get("date", ""),
+                row.get("time", ""),
+                row.get("discord_user", ""),
+                row.get("x_handle", ""),
+                row.get("activity_type", ""),
+                activity_url,
+                row.get("target_url", ""),
+                row.get("task_id", ""),
+                row.get("notes", ""),
+            ])
+
+        if not new_rows:
+            continue
+
+        for start in range(0, len(new_rows), 500):
+            batch = new_rows[start:start + 500]
+            worksheet.append_rows(batch, value_input_option="RAW")
+            total_inserted += len(batch)
+        logger.info("Synced %s new X activities to %s", len(new_rows), tab_name)
+
+    return total_inserted
+
 
 def run_sync():
     """Run one sync cycle"""
@@ -127,6 +243,15 @@ def run_sync():
         tasks_spreadsheet = gc.open_by_key(tasks_sheet_id)
         activity_spreadsheet = gc.open_by_key(activity_sheet_id)
 
+        csv_activity_path = project_root / "database" / "x_activity_log.csv"
+        csv_synced = _sync_x_activity_csv_to_sheet(
+            activity_spreadsheet,
+            month_tab_format,
+            csv_activity_path,
+        )
+        if csv_synced:
+            logger.info("Synced %s CSV X activities to activity sheet", csv_synced)
+
         parser = MembersSheetsParser()
         members_db = MembersDBService(str(project_root / "database" / "members.csv"))
         year_month = _month_tab_to_year_month(month_tab)
@@ -162,7 +287,7 @@ def run_sync():
             if members_db.upsert_task(task_data):
                 tasks_synced += 1
 
-        x_rows = _fetch_sheet(activity_spreadsheet, month_tab, "A:K")
+        x_rows = _fetch_sheet(activity_spreadsheet, month_tab, "A:I")
         x_activities = parser.parse_x_activity_log(x_rows)
         x_inserted = members_db.insert_x_activities_batch(x_activities)
 

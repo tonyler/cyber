@@ -31,8 +31,6 @@ CREATE TABLE IF NOT EXISTS x_activity_log (
     activity_url VARCHAR(500),
     target_url VARCHAR(500),
     task_id VARCHAR(50),
-    impressions INTEGER DEFAULT 0,
-    engagement INTEGER DEFAULT 0,
     notes TEXT,
     UNIQUE(discord_user, activity_url)
 );

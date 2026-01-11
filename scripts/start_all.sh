@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 LOGS_DIR="$PROJECT_ROOT/logs"
-CHROME_DRIVER_DEFAULT="/root/.wdm/drivers/chromedriver/linux64/143.0.7499.169/chromedriver-linux64/chromedriver"
+ROOT_VENV="$PROJECT_ROOT/venv"
 
 log_warn() {
     echo "⚠️  $1"
@@ -72,17 +72,12 @@ if [ ! -f "$LOGS_DIR/scrapers.pid" ]; then
     if [ ! -f "$PROJECT_ROOT/scripts/scraper_daemon.sh" ]; then
         log_warn "Scraper daemon script missing; skipping scrapers."
     else
-        export CHROMEDRIVER_PATH="${CHROMEDRIVER_PATH:-$CHROME_DRIVER_DEFAULT}"
-        if [ ! -x "$CHROMEDRIVER_PATH" ]; then
-            log_warn "CHROMEDRIVER_PATH not executable: $CHROMEDRIVER_PATH"
-            log_warn "Set CHROMEDRIVER_PATH to a valid ChromeDriver to run scrapers."
-        else
-            nohup bash "$PROJECT_ROOT/scripts/scraper_daemon.sh" > "$LOGS_DIR/scrapers.log" 2>&1 &
-            SCRAPERS_PID=$!
-            echo "$SCRAPERS_PID" > "$LOGS_DIR/scrapers.pid"
-            echo "✅ Scraper daemon started (PID: $SCRAPERS_PID)"
-            echo "Logs: $LOGS_DIR/scrapers.log"
-        fi
+        export PYTHON_BIN="${PYTHON_BIN:-$ROOT_VENV/bin/python3}"
+        nohup bash "$PROJECT_ROOT/scripts/scraper_daemon.sh" > "$LOGS_DIR/scrapers.log" 2>&1 &
+        SCRAPERS_PID=$!
+        echo "$SCRAPERS_PID" > "$LOGS_DIR/scrapers.pid"
+        echo "✅ Scraper daemon started (PID: $SCRAPERS_PID)"
+        echo "Logs: $LOGS_DIR/scrapers.log"
     fi
 fi
 

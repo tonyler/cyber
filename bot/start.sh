@@ -3,7 +3,12 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")"
+BOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(dirname "$BOT_DIR")"
+ROOT_VENV="$PROJECT_ROOT/venv"
+DEPS_MARKER="$ROOT_VENV/.deps_installed"
+
+cd "$BOT_DIR"
 
 # Check Python
 if ! command -v python3 > /dev/null 2>&1; then
@@ -11,18 +16,26 @@ if ! command -v python3 > /dev/null 2>&1; then
     exit 1
 fi
 
-# Check if venv exists
-if [ ! -d "venv" ]; then
-    echo "Virtual environment not found. Creating..."
-    python3 -m venv venv
-    source venv/bin/activate
-    if [ -f "requirements.txt" ]; then
-        pip install -r requirements.txt
-    else
-        echo "Warning: requirements.txt not found; skipping dependency install."
+# Ensure root venv exists and dependencies are installed
+if [ ! -d "$ROOT_VENV" ]; then
+    echo "Root virtual environment not found. Creating..."
+    python3 -m venv "$ROOT_VENV"
+fi
+
+if ! "$ROOT_VENV/bin/python3" -m pip --version > /dev/null 2>&1; then
+    "$ROOT_VENV/bin/python3" -m ensurepip --upgrade
+fi
+
+if [ -f "$PROJECT_ROOT/requirements.txt" ]; then
+    if [ ! -f "$DEPS_MARKER" ]; then
+        if "$ROOT_VENV/bin/python3" -m pip install -r "$PROJECT_ROOT/requirements.txt"; then
+            touch "$DEPS_MARKER"
+        else
+            echo "Warning: dependency install failed; continuing without updating packages."
+        fi
     fi
 else
-    source venv/bin/activate
+    echo "Warning: requirements.txt not found at $PROJECT_ROOT; skipping dependency install."
 fi
 
 # Check if .env exists
@@ -42,4 +55,4 @@ if [ ! -f "../shared/credentials/google.json" ]; then
 fi
 
 echo "Starting Discord Bot..."
-python bot.py
+PYTHONUNBUFFERED=1 "$ROOT_VENV/bin/python3" -u bot.py

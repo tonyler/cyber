@@ -114,9 +114,7 @@ class MembersSheetsParser:
                     'activity_url': row[5].strip() if len(row) > 5 and row[5] else None,
                     'target_url': target_url,
                     'task_id': row[7].strip() if len(row) > 7 and row[7] else None,
-                    'impressions': self._parse_int(row[8]) if len(row) > 8 and row[8] else 0,
-                    'engagement': self._parse_int(row[9]) if len(row) > 9 and row[9] else 0,
-                    'notes': row[10].strip() if len(row) > 10 and row[10] else None
+                    'notes': row[8].strip() if len(row) > 8 and row[8] else None
                 }
 
                 activities.append(activity)

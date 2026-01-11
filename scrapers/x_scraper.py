@@ -698,7 +698,7 @@ class XScraper(BaseScraper):
                     notes = ''
 
                 # Column structure: date, time, discord_user, x_handle, activity_type,
-                # activity_url, target_url, task_id, impressions, engagement, notes
+                # activity_url, target_url, task_id, notes
                 row = [
                     date,                       # A: date
                     time_str,                   # B: time
@@ -708,15 +708,13 @@ class XScraper(BaseScraper):
                     activity_url,               # F: activity_url
                     target_url,                 # G: target_url
                     '',                         # H: task_id (empty for now)
-                    0,                          # I: impressions (0 for now)
-                    0,                          # J: engagement (0 for now)
-                    notes                       # K: notes
+                    notes                       # I: notes
                 ]
 
                 rows.append(row)
 
-            # Write to monthly tab, columns A-K for X activities
-            range_name = f"'{month_tab}'!A:K"
+            # Write to monthly tab, columns A-I for X activities
+            range_name = f"'{month_tab}'!A:I"
 
             result = self.sheets_service.spreadsheets().values().get(
                 spreadsheetId=self.activity_sheet_id,

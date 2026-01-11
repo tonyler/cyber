@@ -7,8 +7,12 @@ from dotenv import load_dotenv
 import os
 import json
 from datetime import datetime
+import logging
 
 load_dotenv('.env')
+
+logging.basicConfig(level=logging.INFO)
+logging.getLogger("discord").setLevel(logging.DEBUG)
 
 config_path = os.path.join('..', 'shared', 'config', 'bot_config.json')
 with open(config_path) as f:

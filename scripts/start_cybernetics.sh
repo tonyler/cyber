@@ -8,8 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 DASHBOARD_DIR="$PROJECT_ROOT/dashboard"
 LOGS_DIR="$PROJECT_ROOT/logs"
-VENV_DIR="$DASHBOARD_DIR/venv"
-SYNC_VENV_DIR="$PROJECT_ROOT/venv"
+ROOT_VENV="$PROJECT_ROOT/venv"
+DEPS_MARKER="$ROOT_VENV/.deps_installed"
 SYNC_WORKER="$PROJECT_ROOT/scripts/sync_worker.py"
 DASHBOARD_APP="$DASHBOARD_DIR/app.py"
 INIT_DBS="$PROJECT_ROOT/scripts/init_dbs.py"
@@ -70,25 +70,27 @@ if [ "$ENABLE_DASHBOARD" -eq 0 ] && [ "$ENABLE_SYNC" -eq 0 ]; then
     exit 0
 fi
 
-# Ensure dashboard venv + dependencies
+# Ensure root venv + dependencies
 if command -v python3 > /dev/null 2>&1; then
-    if [ ! -d "$VENV_DIR" ]; then
-        echo "Creating dashboard virtual environment..."
-        python3 -m venv "$VENV_DIR"
+    if [ ! -d "$ROOT_VENV" ]; then
+        echo "Creating root virtual environment..."
+        python3 -m venv "$ROOT_VENV"
     fi
 
-    req_args=()
-    if [ -f "$DASHBOARD_DIR/requirements.txt" ]; then
-        req_args+=(-r "$DASHBOARD_DIR/requirements.txt")
-    fi
-    if [ -f "$DASHBOARD_DIR/requirements-sync.txt" ]; then
-        req_args+=(-r "$DASHBOARD_DIR/requirements-sync.txt")
+    if ! "$ROOT_VENV/bin/python3" -m pip --version > /dev/null 2>&1; then
+        "$ROOT_VENV/bin/python3" -m ensurepip --upgrade
     fi
 
-    if [ "${#req_args[@]}" -gt 0 ]; then
-        "$VENV_DIR/bin/pip" install "${req_args[@]}"
+    if [ -f "$PROJECT_ROOT/requirements.txt" ]; then
+        if [ ! -f "$DEPS_MARKER" ]; then
+            if "$ROOT_VENV/bin/python3" -m pip install -r "$PROJECT_ROOT/requirements.txt"; then
+                touch "$DEPS_MARKER"
+            else
+                log_warn "Dependency install failed; continuing without updating packages."
+            fi
+        fi
     else
-        log_warn "No requirements files found in $DASHBOARD_DIR (skipping pip install)"
+        log_warn "No requirements.txt found at $PROJECT_ROOT (skipping pip install)"
     fi
 else
     log_warn "python3 not found; dashboard + sync cannot start"
@@ -107,10 +109,7 @@ fi
 if [ "${ENABLE_SYNC:-0}" -eq 1 ]; then
     echo ""
     echo "Starting Sync Daemon..."
-    SYNC_PYTHON="$VENV_DIR/bin/python3"
-    if [ -x "$SYNC_VENV_DIR/bin/python3" ]; then
-        SYNC_PYTHON="$SYNC_VENV_DIR/bin/python3"
-    fi
+    SYNC_PYTHON="$ROOT_VENV/bin/python3"
     start_with_pidfile "Sync Daemon" "$LOGS_DIR/sync_daemon.pid" \
         "$SYNC_PYTHON" "$SYNC_WORKER"
 fi
@@ -119,7 +118,7 @@ if [ "${ENABLE_DASHBOARD:-0}" -eq 1 ]; then
     echo ""
     echo "Starting Flask Dashboard (Cyberpunk UI + Stats DB)..."
     start_with_pidfile "Dashboard" "$LOGS_DIR/dashboard.pid" \
-        "$VENV_DIR/bin/python3" "$DASHBOARD_APP"
+        "$ROOT_VENV/bin/python3" "$DASHBOARD_APP"
 fi
 
 echo ""
