@@ -35,6 +35,9 @@ outputs/
 *.key
 *.pem
 x.com_cookies.json
+shared/x_session.json
+shared/credentials/google.json
+shared/credentials/
 
 # OS/editor
 .DS_Store
