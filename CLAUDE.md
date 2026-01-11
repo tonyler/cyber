@@ -1,60 +1,63 @@
-# CLAUDE.md – Cyber Project Rules (minimal & pragmatic edition – Jan 2026)
+# CLAUDE.md – Cyber Project Rules (minimal & portable edition – 2026-01-11)
 
-Cyber = Discord interaction + very simple backend + beautiful data showcase  
-Goal: Maximum value with minimum code & complexity.
+You are helping build Cyber – a lightweight raid/content coordination tool  
+Main components: Discord bot + very simple backend + beautiful dashboard  
+Data: Google Sheets (source of truth) + local CSVs (fast views / snapshots)
 
-## Core Philosophy – Repeat This To Yourself
-"Simple is violently preferable to clever."
-If you can solve it with 30 lines instead of 300 → do the 30.
-If Google Sheets + CSV already contain the data → don't create new storage.
-If something can be a static page or simple template → don't make it dynamic yet.
+## Core Philosophy – Repeat this constantly
+"Simple beats clever. Portable beats everything. Complexity is the enemy."
 
-## Absolute Rules
-1. Google Sheets is **the** database. Period.
-2. Local CSVs are **caches / snapshots / fast views**. They exist to make dashboard loading fast.
-3. Never add new persistent storage without Tony's explicit blessing.
-4. Dashboard phase 1 = **beautiful read-only viewer** of existing Sheets + CSVs
-5. No authentication system yet → simple shared links or Discord role check is enough for now
-6. Backend = **only what's strictly necessary** to:
-   - Serve dashboard
-   - Handle occasional CSV↔Sheets sync
-   - Expose minimal API endpoints if needed for Discord bot
+If you can solve it with 20 lines instead of 150 → choose 20.  
+If the folder can be renamed/moved/cloned anywhere → make sure it still works.
 
-## Strong Technical Preferences (keep it dead simple)
+## Sacred Rules (never break these)
+
+1. Google Sheets = only persistent database. No exceptions.
+2. Local CSVs = caches / fast/pretty views / backups. Sync must be dead simple.
+3. NO absolute paths ANYWHERE (no /root, no /home, no C:\, no D:\...)
+   → only relative paths from project root (use pathlib)
+4. NO machine-specific things in code (usernames, IPs, drive letters...)
+5. Credentials/secrets/tokens/sheet IDs → ONLY from .env file
+6. After git clone / git pull → should work after:
+   • pip install -r requirements.txt
+   • cp .env.example .env && edit .env
+   • (maybe one manual sync if needed)
+7. Dashboard phase 1 goal = beautiful read-only showcase of Sheets + CSVs
+   → keep it stupid simple (Flask/Jinja2/Tailwind or even static HTML+JS)
+
+## Strong technical preferences right now
 - Python 3.11+
-- FastAPI or even just Flask (Flask is winning for simplicity right now)
-- **No database ORM** — use gspread + pandas + csv module
-- **No complex state management** — reload data on demand or on timer
-- Jinja2 + Tailwind CSS + minimal vanilla JS → beautiful & maintainable
-- Logging: just Python `logging` + console/file
-- Config: `.env` file + python-dotenv (that's it)
+- Flask > FastAPI (simplicity wins)
+- gspread + pandas + csv module → that's the data stack
+- python-dotenv for config
+- pathlib everywhere for paths
+- logging (standard module) → no print() in production code
+- Tailwind + minimal vanilla JS or htmx (if dynamic needed)
+- Black + ruff + isort (or very close)
 
-## Naming & UX Style
-- Dashboard should feel **premium & clean** even with very little code
-- Use big numbers, simple charts, dark mode by default
-- Discord commands: keep them stupid simple
-  Good: /submit, /register, /myprofile, /raidstats
-  Avoid: /advanced-content-submission-v3-with-options
+## Naming style
+Discord commands: short & obvious  
+/submit /register /myprofile /raidstats /dashboard-link
 
-## Current Priority Ladder (do in this exact order)
-1. Make credentials & sheet IDs live only in .env (security basics)
-2. Create ultra-simple bidirectional CSV ↔ Sheets sync script (manual run ok)
-3. Build the "wow" dashboard – beautiful read-only views of:
-   • Current month's raid content
-   • Member registry overview
-   • Simple stats (submissions count, top posters, etc)
-4. Make Discord bot read/write to same Sheets + update CSVs
-5. Add very basic error logging (file + optional Discord channel)
-6. Only then: think about rate limits, input validation, tests...
+Dashboard: clean, dark mode default, big numbers, simple tables/charts
 
-## When suggesting code
-- Prefer 20–60 line solutions over 200+ line ones
-- Show the **simplest possible** version first
-- Only add abstraction when the simple version is clearly painful
-- If you want to suggest something more advanced → mark it clearly as "phase 2/3 idea"
+## Current priority order (strict)
+1. Make project 100% portable (relative paths, no machine-specific code)
+2. Centralize ALL configuration & secrets in .env (+ create good .env.example)
+3. Simple & reliable CSV ↔ Google Sheets sync (manual run is acceptable)
+4. Beautiful minimal dashboard (read-only views of current data)
+5. Make Discord bot happy with same data sources
+6. Basic visibility of errors (log file + optional Discord channel)
+7. Polish UX, input validation, rate limiting → only after above
+
+## When suggesting changes
+- Prefer smallest possible fix that works
+- Show before → after style when refactoring
+- First solution should be the simplest realistic one
+- Only suggest more advanced patterns AFTER I say the simple one hurts
 
 Call me Tony.  
 Be brutally pragmatic.  
-Complexity is the enemy.
+Portability and simplicity are sacred.
 
-Last updated: 11 January 2026
+Last updated: 2026-01-11
