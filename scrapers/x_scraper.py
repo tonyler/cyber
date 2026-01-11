@@ -1,6 +1,7 @@
 import json
 import re
 import time
+import csv
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Tuple
@@ -190,6 +191,26 @@ class XScraper(BaseScraper):
         else:  # Default to MM/YY
             return now.strftime('%m/%y')
 
+    def _click_show_more_replies(self):
+        """Click 'Show' buttons to reveal hidden/spam replies"""
+        try:
+            # Look for various "Show" button patterns
+            show_buttons = self.page.locator('span:has-text("Show")').all()
+            clicked = 0
+            for button in show_buttons:
+                try:
+                    if button.is_visible():
+                        button.click()
+                        clicked += 1
+                        time.sleep(0.5)
+                except Exception:
+                    continue
+            if clicked > 0:
+                logger.info(f"Clicked {clicked} 'Show' buttons to reveal hidden replies")
+                time.sleep(2)  # Wait for content to load
+        except Exception as e:
+            logger.debug(f"Error clicking show buttons: {e}")
+
     def _scroll_page(self, scrolls: int = 3):
         """Scroll page to load dynamic content"""
         for _ in range(scrolls):
@@ -314,9 +335,15 @@ class XScraper(BaseScraper):
             self._safe_get(tweet_url)
             time.sleep(3)
 
-            # Scroll to load ALL replies - use more aggressive scrolling (mobile-optimized)
-            scroll_count = self._scroll_to_end(max_scrolls=100, wait_time=2.0)
+            # Click "Show" buttons for hidden/spam replies
+            self._click_show_more_replies()
+
+            # Scroll to load ALL replies - slower for mobile to ensure content loads
+            scroll_count = self._scroll_to_end(max_scrolls=100, wait_time=3.5)
             logger.info(f"Scrolled {scroll_count} times to load all replies")
+
+            # Click show buttons again after scrolling in case new ones appeared
+            self._click_show_more_replies()
 
             tweet_elements = self.page.locator('article').all()
             logger.info(f"Found {len(tweet_elements)} tweet elements")
@@ -366,8 +393,8 @@ class XScraper(BaseScraper):
             self._safe_get(quotes_url)
             time.sleep(3)
 
-            # Scroll to load ALL quote tweets (mobile-optimized)
-            scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=1.5)
+            # Scroll to load ALL quote tweets - slower for mobile
+            scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=3.0)
             logger.info(f"Scrolled {scroll_count} times to load all quote tweets")
 
             tweet_elements = self.page.locator('article').all()
@@ -414,8 +441,8 @@ class XScraper(BaseScraper):
             self._safe_get(reposts_url)
             time.sleep(3)
 
-            # Scroll to load ALL reposts (mobile-optimized)
-            scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=1.5)
+            # Scroll to load ALL reposts - slower for mobile
+            scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=3.0)
             logger.info(f"Scrolled {scroll_count} times to load all reposts")
 
             user_cells = self.page.locator('[data-testid="UserCell"]').all()
@@ -512,7 +539,7 @@ class XScraper(BaseScraper):
                     logger.debug(f"Error parsing aria-label '{label}': {str(e)}")
                     continue
 
-            # Additional attempt for views - sometimes in span with specific pattern
+            # Additional attempts for views on mobile
             if metrics['impressions'] is None:
                 try:
                     # Look for analytics link or view count elements
@@ -526,6 +553,31 @@ class XScraper(BaseScraper):
                                 break
                 except Exception:
                     pass
+
+            # Mobile-specific: look for view count in text content
+            if metrics['impressions'] is None:
+                try:
+                    # Search all text nodes for view count pattern
+                    all_text_elements = tweet_article.locator('*').all()
+                    for elem in all_text_elements:
+                        try:
+                            text = elem.text_content() or ''
+                            # Match patterns like "1.2K Views", "Views 1.2K", or just numbers with K/M
+                            if 'view' in text.lower():
+                                # Extract number before or after "views"
+                                import re
+                                match = re.search(r'([\d,.]+[KMB]?)\s*views?|views?\s*([\d,.]+[KMB]?)', text, re.IGNORECASE)
+                                if match:
+                                    count_str = match.group(1) or match.group(2)
+                                    count = self.parse_count(count_str)
+                                    if count > 0:
+                                        metrics['impressions'] = count
+                                        logger.debug(f"Found views in text: {text} -> {count}")
+                                        break
+                        except Exception:
+                            continue
+                except Exception as e:
+                    logger.debug(f"Error searching for mobile view count: {e}")
 
             if all(value is None for value in metrics.values()):
                 logger.warning(f"No X metrics found on {tweet_url}; selectors may be stale.")
@@ -690,6 +742,102 @@ class XScraper(BaseScraper):
         except Exception as e:
             logger.error(f"❌ Error writing to sheet: {str(e)}", exc_info=True)
 
+    def _get_existing_csv_activity_urls(self, csv_path: Path) -> set:
+        """Get set of activity URLs already in CSV to prevent duplicates"""
+        if not csv_path.exists():
+            return set()
+
+        existing_urls = set()
+        try:
+            with open(csv_path, 'r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    activity_url = row.get('activity_url', '').strip()
+                    if activity_url:
+                        existing_urls.add(activity_url)
+            logger.debug(f"Found {len(existing_urls)} existing activities in CSV")
+        except Exception as e:
+            logger.warning(f"Could not read existing CSV data: {e}")
+            return set()
+
+        return existing_urls
+
+    def write_activities_to_csv(self, activities: List[Dict], target_url: str):
+        """Write activities to CSV file (append-only, no overwrites)"""
+        if not activities:
+            logger.info("No activities to write to CSV")
+            return
+
+        csv_path = Path(__file__).parent.parent / "database" / "x_activity_log.csv"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Define CSV headers (excluding impressions and engagement)
+        headers = [
+            'date', 'time', 'discord_user', 'x_handle', 'activity_type',
+            'activity_url', 'target_url', 'task_id', 'notes'
+        ]
+
+        # Check if file exists
+        file_exists = csv_path.exists()
+
+        # Get existing activity URLs to prevent duplicates
+        existing_urls = self._get_existing_csv_activity_urls(csv_path)
+
+        try:
+            # IMPORTANT: Use 'a' (append) mode to never overwrite existing data
+            with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+
+                # Write headers only if file is new
+                if not file_exists:
+                    writer.writerow(headers)
+                    logger.info(f"Created new CSV file: {csv_path}")
+
+                # Write activity rows
+                rows_written = 0
+                duplicates_skipped = 0
+
+                for activity in activities:
+                    activity_data = activity['activity']
+                    timestamp = activity_data.get('timestamp', '')
+                    date, time_str = self._parse_activity_timestamp(timestamp)
+                    activity_type = activity_data.get('activity_type', 'comment')
+                    activity_url = activity_data.get('url', '')
+
+                    # Skip if this activity is already in the CSV
+                    if activity_url in existing_urls:
+                        duplicates_skipped += 1
+                        logger.debug(f"Skipping duplicate CSV entry: {activity_url}")
+                        continue
+
+                    if activity_type in ('comment', 'quote'):
+                        notes = activity_data.get('text', '')[:500]  # Limit text length
+                    else:
+                        notes = ''
+
+                    row = [
+                        date,                       # date
+                        time_str,                   # time
+                        activity['discord_user'],   # discord_user
+                        activity['x_handle'],       # x_handle
+                        activity_type,              # activity_type
+                        activity_url,               # activity_url
+                        target_url,                 # target_url
+                        '',                         # task_id (empty for now)
+                        notes                       # notes
+                    ]
+
+                    writer.writerow(row)
+                    rows_written += 1
+
+                if rows_written > 0:
+                    logger.info(f"✅ Wrote {rows_written} new activities to CSV: {csv_path}")
+                if duplicates_skipped > 0:
+                    logger.info(f"⏭️  Skipped {duplicates_skipped} duplicate activities already in CSV")
+
+        except Exception as e:
+            logger.error(f"❌ Error writing to CSV: {str(e)}", exc_info=True)
+
     def scrape_link(self, link: Dict) -> int:
         """Scrape a single X link"""
         url = self._normalize_x_url(link['url'])
@@ -741,6 +889,7 @@ class XScraper(BaseScraper):
             matched_activities = self._filter_new_activities(matched_activities, url)
             if matched_activities:
                 self.write_activities_to_sheet(matched_activities, url)
+                self.write_activities_to_csv(matched_activities, url)
 
             # Update stats sheet
             if metrics and any(value is not None for value in metrics.values()):

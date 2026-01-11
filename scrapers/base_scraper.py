@@ -5,7 +5,7 @@ import signal
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
-from playwright.sync_api import sync_playwright, Browser, Page, BrowserContext, devices
+from playwright.sync_api import sync_playwright, Browser, Page, BrowserContext
 from playwright_stealth import stealth
 
 project_root = Path(__file__).parent.parent
@@ -57,7 +57,7 @@ class BaseScraper:
 
         if self.context is None:
             # Use iPhone 14 Pro for mobile X scraping (faster, simpler DOM)
-            iphone = devices['iPhone 14 Pro']
+            iphone = self.playwright.devices['iPhone 14 Pro']
             self.context = self.browser.new_context(
                 **iphone,
                 ignore_https_errors=True,

@@ -14,7 +14,11 @@
       "Bash(timeout 180 python3:*)",
       "Bash(timeout 30 python3:*)",
       "Bash(timeout 240 python3:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(./venv/bin/pip install:*)",
+      "Bash(./venv/bin/playwright:*)",
+      "Bash(../venv/bin/python3:*)",
+      "Bash(./venv/bin/python3:*)"
     ]
   }
 }
