@@ -14,7 +14,8 @@
       "Bash(playwright install:*)",
       "Bash(/root/cyber/dashboard/venv/bin/python3:*)",
       "Bash(curl:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(xargs ls:*)"
     ]
   }
 }

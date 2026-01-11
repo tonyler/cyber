@@ -12,7 +12,6 @@ ROOT_VENV="$PROJECT_ROOT/venv"
 DEPS_MARKER="$ROOT_VENV/.deps_installed"
 SYNC_WORKER="$PROJECT_ROOT/scripts/sync_worker.py"
 DASHBOARD_APP="$DASHBOARD_DIR/app.py"
-INIT_DBS="$PROJECT_ROOT/scripts/init_dbs.py"
 
 log_warn() {
     echo "⚠️  $1"
