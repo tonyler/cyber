@@ -196,9 +196,15 @@ class XScraper(BaseScraper):
             self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             time.sleep(2)
 
+<<<<<<< HEAD
     def _scroll_to_end(self, max_scrolls: int = 50, wait_time: float = 2.0):
         """Scroll until no new content loads or max scrolls reached (mobile-optimized)"""
         logger.info("Scrolling to load all content (mobile mode)...")
+=======
+    def _scroll_to_end(self, max_scrolls: int = 50, wait_time: float = 3.0):
+        """Scroll until no new content loads or max scrolls reached"""
+        logger.info("Scrolling to load all content...")
+>>>>>>> origin/main
         previous_height = 0
         scrolls_without_change = 0
         total_scrolls = 0
@@ -244,7 +250,10 @@ class XScraper(BaseScraper):
                     if href and href.startswith('/'):
                         # Extract username from href (format: /@username or /username)
                         username = href.lstrip('/').split('/')[0].lstrip('@')
+<<<<<<< HEAD
                         logger.debug(f"Username extracted via User-Name testid: {username}")
+=======
+>>>>>>> origin/main
 
             # Fallback: try to find username from tweet link
             if not username:
@@ -258,6 +267,7 @@ class XScraper(BaseScraper):
                             parts = tweet_href.lstrip('/').split('/')
                             if len(parts) >= 1:
                                 username = parts[0].lstrip('@')
+<<<<<<< HEAD
                                 logger.debug(f"Username extracted via time element fallback: {username}")
 
             # Extract text
@@ -272,6 +282,12 @@ class XScraper(BaseScraper):
                 if text_element.count() > 0:
                     text = text_element.text_content()
                     logger.debug("Tweet text extracted via lang attribute fallback (mobile)")
+=======
+
+            # Extract text
+            text_element = element.locator('[data-testid="tweetText"]').first
+            text = text_element.text_content() if text_element.count() > 0 else ''
+>>>>>>> origin/main
 
             # Extract timestamp and URL
             time_element = element.locator('time').first
@@ -314,8 +330,13 @@ class XScraper(BaseScraper):
             self._safe_get(tweet_url)
             time.sleep(3)
 
+<<<<<<< HEAD
             # Scroll to load ALL replies - use more aggressive scrolling (mobile-optimized)
             scroll_count = self._scroll_to_end(max_scrolls=100, wait_time=2.0)
+=======
+            # Scroll to load ALL replies - use more aggressive scrolling
+            scroll_count = self._scroll_to_end(max_scrolls=100, wait_time=3.0)
+>>>>>>> origin/main
             logger.info(f"Scrolled {scroll_count} times to load all replies")
 
             tweet_elements = self.page.locator('article').all()
@@ -366,8 +387,13 @@ class XScraper(BaseScraper):
             self._safe_get(quotes_url)
             time.sleep(3)
 
+<<<<<<< HEAD
             # Scroll to load ALL quote tweets (mobile-optimized)
             scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=1.5)
+=======
+            # Scroll to load ALL quote tweets
+            scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=2.0)
+>>>>>>> origin/main
             logger.info(f"Scrolled {scroll_count} times to load all quote tweets")
 
             tweet_elements = self.page.locator('article').all()
@@ -414,8 +440,13 @@ class XScraper(BaseScraper):
             self._safe_get(reposts_url)
             time.sleep(3)
 
+<<<<<<< HEAD
             # Scroll to load ALL reposts (mobile-optimized)
             scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=1.5)
+=======
+            # Scroll to load ALL reposts
+            scroll_count = self._scroll_to_end(max_scrolls=50, wait_time=2.0)
+>>>>>>> origin/main
             logger.info(f"Scrolled {scroll_count} times to load all reposts")
 
             user_cells = self.page.locator('[data-testid="UserCell"]').all()
