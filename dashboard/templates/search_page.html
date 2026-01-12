@@ -7,9 +7,8 @@
     <h1>[ MEMBER SEARCH ]</h1>
 
     <div class="panel">
-        <form method="get" action="{{ url_for('search_page') }}" style="display: flex; gap: 1rem; align-items: center;">
-            <input type="text" name="q" value="{{ query }}" placeholder="ENTER DISCORD USERNAME..."
-                   style="flex: 1;" autofocus>
+        <form method="get" action="{{ url_for('search_page') }}" class="search-form">
+            <input type="text" name="q" value="{{ query }}" placeholder="ENTER DISCORD USERNAME..." autofocus>
             <button type="submit">SEARCH</button>
         </form>
     </div>
@@ -19,12 +18,12 @@
         <div class="panel">
             <h2>{{ results|length }} MEMBER(S) FOUND</h2>
 
-            <div style="display: grid; gap: 1.5rem; margin-top: 2rem;">
+            <div class="members-grid">
                 {% for member in results %}
                 <div class="panel">
                     <h3>{{ member.discord_user|upper }}</h3>
 
-                    <div style="display: grid; gap: 0.75rem; margin-top: 1rem;">
+                    <div class="member-details">
                         {% if member.x_handle %}
                         <div>
                             <span class="text-muted">X:</span>

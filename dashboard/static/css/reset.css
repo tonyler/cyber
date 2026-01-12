@@ -1,9 +1,4 @@
-/*
- * CSS Reset and Base Styles
- * Modern reset with cyberpunk background effects
- */
-
-/* Modern CSS Reset */
+/* Minimal CSS Reset */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -14,82 +9,6 @@ html {
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-size-adjust: 100%;
-  -webkit-text-size-adjust: 100%;
-}
-
-body {
-  position: relative;
-  min-height: 100vh;
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  font-family: var(--font-body);
-  font-size: 1rem;
-  line-height: 1.6;
-  text-size-adjust: 100%;
-  -webkit-text-size-adjust: 100%;
-  overflow-x: hidden;
-  padding-bottom: 80px; /* Space for fixed footer */
-}
-
-/* Background Layers */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image: url('/static/img/background.jpeg');
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  opacity: 0.15;
-  z-index: -2;
-}
-
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: radial-gradient(
-    circle at 50% 0%,
-    rgba(0, 240, 255, 0.1) 0%,
-    transparent 50%
-  );
-  z-index: -1;
-  pointer-events: none;
-}
-
-/* Grid Overlay */
-.cyber-grid {
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0, 240, 255, 0.05) 1px, transparent 1px);
-  background-size: 50px 50px;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.3;
-}
-
-/* Typography Defaults */
-h1, h2, h3, h4, h5, h6 {
-  line-height: 1.2;
-  font-weight: 700;
-}
-
-a {
-  color: var(--text-link);
-  text-decoration: none;
-  transition: color var(--duration-fast) var(--ease-default);
-}
-
-a:hover {
-  color: var(--cyan-bright);
-}
-
-button {
-  cursor: pointer;
-  font-family: inherit;
 }
 
 img {
@@ -97,27 +16,7 @@ img {
   display: block;
 }
 
-/* Selection Styling */
 ::selection {
-  background: rgba(0, 240, 255, 0.3);
-  color: var(--text-primary);
-}
-
-/* Scrollbar Styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--cyan);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--cyan-bright);
+  background: rgba(0, 217, 255, 0.3);
+  color: #e8f4f8;
 }

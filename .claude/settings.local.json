@@ -15,7 +15,9 @@
       "Bash(/root/cyber/dashboard/venv/bin/python3:*)",
       "Bash(curl:*)",
       "Bash(ls:*)",
-      "Bash(xargs ls:*)"
+      "Bash(xargs ls:*)",
+      "Bash(./stop.sh)",
+      "Bash(./start.sh)"
     ]
   }
 }

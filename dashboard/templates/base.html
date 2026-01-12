@@ -2,14 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-    <meta name="theme-color" content="#0a0e27">
-    <title>{% block title %}CYBERNETICS HUD{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a1628">
+    <title>{% block title %}THE CYBERNETICS{% endblock %}</title>
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=200">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/reset.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=500">
 </head>
 <body>
-    <!-- Cyber Grid Background -->
+    <!-- Background Grid -->
     <div class="cyber-grid"></div>
 
     <!-- Navigation -->
@@ -17,7 +18,7 @@
         <div class="container">
             <div class="nav-content">
                 <a href="{{ url_for('index') }}" class="nav-brand">
-                    CYBERNETICS<span class="brand-dot">.</span>
+                    THE CYBERNETICS.
                 </a>
 
                 <button class="nav-toggle" id="navToggle" aria-label="Toggle navigation">
@@ -42,7 +43,6 @@
                 </div>
             </div>
         </div>
-        <div class="nav-scanline"></div>
     </nav>
 
     <!-- Main Content -->
@@ -54,19 +54,14 @@
     <footer class="cyber-footer">
         <div class="container">
             <div class="footer-content">
-                <div class="footer-branding">
-                    <span class="footer-brand">CYBERNETICS</span>
-                    <span class="footer-separator">//</span>
-                    <span class="footer-subtitle">HUD INTERFACE</span>
+                <div class="footer-left">
+                    THE CYBERNETICS // ANALYTICS DASHBOARD
                 </div>
-                <div class="footer-meta">
-                    <span class="footer-status">
-                        <span class="status-indicator"></span>
-                        ONLINE
-                    </span>
+                <div class="footer-right">
+                    <span class="status-indicator"></span>
+                    SYSTEM ONLINE
                     {% if last_sync_time %}
-                    <span class="footer-separator">|</span>
-                    <span class="footer-sync">SYNC: {{ last_sync_time }}</span>
+                    | SYNC: {{ last_sync_time }}
                     {% endif %}
                 </div>
             </div>

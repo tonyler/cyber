@@ -11,7 +11,7 @@
     <h1>[ {{ page_title }} ]</h1>
 
     <div class="panel">
-        <form method="get" action="{{ form_action or url_for('history_page') }}" style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+        <form method="get" action="{{ form_action or url_for('history_page') }}" class="filter-form">
             <label>MONTH:</label>
             <input type="month" name="month" value="{{ month }}">
 
@@ -30,7 +30,7 @@
     <div class="panel">
         <h2>{{ activities|length }} ACTIVITIES - {{ platform|upper }}</h2>
 
-        <div style="overflow-x: auto;">
+        <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
@@ -45,18 +45,18 @@
                 <tbody>
                     {% for activity in activities %}
                     <tr>
-                        <td>{{ activity.date }}</td>
-                        <td>{{ activity.time }}</td>
-                        <td>{{ activity.discord_user }}</td>
-                        <td>
+                        <td data-label="Date">{{ activity.date }}</td>
+                        <td data-label="Time">{{ activity.time }}</td>
+                        <td data-label="User">{{ activity.discord_user }}</td>
+                        <td data-label="Platform">
                             {% if activity.platform == 'x' %}
                             X
                             {% else %}
                             REDDIT
                             {% endif %}
                         </td>
-                        <td>{{ activity.activity_type or 'N/A' }}</td>
-                        <td>
+                        <td data-label="Type">{{ activity.activity_type or 'N/A' }}</td>
+                        <td data-label="Link">
                             {% if activity.activity_url %}
                             <a href="{{ activity.activity_url }}" target="_blank" rel="noopener noreferrer">VIEW →</a>
                             {% else %}
