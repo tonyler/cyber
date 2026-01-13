@@ -4,17 +4,26 @@
 echo "🔍 Checking Dashboard 2.0 Status..."
 echo ""
 
-if pgrep -f "python3 app.py" > /dev/null; then
+PID_FILE=".dashboard2.pid"
+LOG_DIR="../logs"
+LOG_FILE="${LOG_DIR}/dashboard2.log"
+
+if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
     echo "✅ Dashboard is RUNNING"
     echo ""
     echo "📊 Process Info:"
-    ps aux | grep "python3 app.py" | grep -v grep | awk '{print "   PID: " $2 "  CPU: " $3 "%  MEM: " $4 "%"}'
+    pid="$(cat "${PID_FILE}")"
+    ps -p "${pid}" -o pid=,pcpu=,pmem= | awk '{print "   PID: " $1 "  CPU: " $2 "%  MEM: " $3 "%"}'
     echo ""
     echo "🌐 Access URL:"
-    echo "   http://37.27.15.9:5003"
+    echo "   http://localhost:5003"
     echo ""
     echo "📝 Recent logs:"
-    tail -5 /tmp/dashboard2.log | sed 's/^/   /'
+    if [ -f "${LOG_FILE}" ]; then
+        tail -5 "${LOG_FILE}" | sed 's/^/   /'
+    else
+        echo "   (no log file yet)"
+    fi
 else
     echo "❌ Dashboard is NOT running"
     echo ""

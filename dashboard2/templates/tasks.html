@@ -52,10 +52,10 @@
                 <h3 class="text-lg font-semibold text-white mb-2">
                     {% if task.target_url %}
                     <a href="{{ task.target_url }}" target="_blank" class="hover:text-cyan-400 transition-colors">
-                        {{ task.description or task.task_id }}
+                        {{ task.display_title or task.description or task.task_id }}
                     </a>
                     {% else %}
-                    {{ task.description or task.task_id }}
+                    {{ task.display_title or task.description or task.task_id }}
                     {% endif %}
                 </h3>
 

@@ -498,6 +498,7 @@ class XScraper(BaseScraper):
             'comments': None,
             'quotes': None,
             'reposts': None,
+            'content': None,
         }
 
         try:
@@ -579,7 +580,14 @@ class XScraper(BaseScraper):
                 except Exception as e:
                     logger.debug(f"Error searching for mobile view count: {e}")
 
-            if all(value is None for value in metrics.values()):
+            metric_values = [
+                metrics.get('impressions'),
+                metrics.get('likes'),
+                metrics.get('comments'),
+                metrics.get('quotes'),
+                metrics.get('reposts'),
+            ]
+            if all(value is None for value in metric_values):
                 logger.warning(f"No X metrics found on {tweet_url}; selectors may be stale.")
             elif self.verbose_metrics:
                 logger.info(
@@ -591,10 +599,68 @@ class XScraper(BaseScraper):
                     metrics.get('reposts')
                 )
 
+            # Extract main tweet content for local storage
+            try:
+                text_element = tweet_article.locator('[data-testid="tweetText"]').first
+                if text_element.count() > 0:
+                    text = text_element.text_content()
+                    if text:
+                        metrics['content'] = text.strip()
+            except Exception as e:
+                logger.debug(f"Failed to extract tweet content: {e}")
+
         except Exception as e:
             logger.debug(f"Failed to extract metrics: {e}")
 
         return metrics
+
+    def _update_task_content_csv(self, target_url: str, content: str):
+        """Save tweet content into coordinated_tasks.csv (content column)."""
+        if not target_url or not content:
+            return
+
+        csv_path = Path(__file__).parent.parent / "database" / "coordinated_tasks.csv"
+        if not csv_path.exists():
+            logger.warning(f"coordinated_tasks.csv not found at {csv_path}")
+            return
+
+        try:
+            with csv_path.open('r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames or []
+                rows = list(reader)
+        except Exception as e:
+            logger.warning(f"Failed to read coordinated_tasks.csv: {e}")
+            return
+
+        if 'content' not in fieldnames:
+            fieldnames.append('content')
+
+        normalized_target = self._normalize_x_url(target_url)
+        updated = False
+        for row in rows:
+            row_url = self._normalize_x_url(row.get('target_url', ''))
+            if row_url and row_url == normalized_target:
+                if not row.get('content'):
+                    row['content'] = content[:2000]
+                    updated = True
+                break
+
+        if not updated:
+            return
+
+        tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
+        try:
+            with tmp_path.open('w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+            tmp_path.replace(csv_path)
+            logger.info(f"✅ Saved tweet content for {normalized_target}")
+        except Exception as e:
+            logger.warning(f"Failed to write coordinated_tasks.csv: {e}")
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
 
     def _update_stats_sheet(self, link: Dict, metrics: Dict[str, int]):
         """Update stats in Google Sheets"""
@@ -889,8 +955,18 @@ class XScraper(BaseScraper):
                 self.write_activities_to_sheet(matched_activities, url)
                 self.write_activities_to_csv(matched_activities, url)
 
-            # Update stats sheet
-            if metrics and any(value is not None for value in metrics.values()):
+            # Save tweet content locally (CSV) and update stats sheet
+            if metrics.get('content'):
+                self._update_task_content_csv(url, metrics.get('content'))
+
+            metric_values = [
+                metrics.get('impressions'),
+                metrics.get('likes'),
+                metrics.get('comments'),
+                metrics.get('quotes'),
+                metrics.get('reposts'),
+            ]
+            if metrics and any(value is not None for value in metric_values):
                 self._update_stats_sheet(link, metrics)
 
             return len(matched_activities)

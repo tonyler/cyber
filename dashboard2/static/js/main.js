@@ -204,4 +204,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     console.log('Cybernetics Dashboard 2.0 initialized ⚡');
+
+    // Back to Top button functionality
+    const backToTopButton = document.getElementById('back-to-top');
+
+    if (backToTopButton) {
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 200) {
+                backToTopButton.classList.remove('scale-0');
+            } else {
+                backToTopButton.classList.add('scale-0');
+            }
+        });
+
+        backToTopButton.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+    }
 });

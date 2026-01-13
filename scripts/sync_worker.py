@@ -263,8 +263,9 @@ def run_sync():
             if members_db.upsert_member(member):
                 members_synced += 1
 
-        tasks_rows = _fetch_sheet(tasks_spreadsheet, month_tab, "A:P")
+        tasks_rows = _fetch_sheet(tasks_spreadsheet, month_tab)
         tasks = parser.parse_monthly_content_tasks(tasks_rows, year_month)
+        existing_tasks = {task.get("task_id"): task for task in members_db.get_tasks_for_month(year_month)}
         removed = members_db.delete_tasks_for_month(year_month)
         if removed:
             logger.info(f"Cleared {removed} tasks for {year_month} before sync")
@@ -276,6 +277,8 @@ def run_sync():
                 'task_type': task.get('task_type'),
                 'target_url': task.get('target_url'),
                 'description': task.get('description'),
+                'content': task.get('content'),
+                'title': task.get('title'),
                 'impressions': task.get('impressions', 0),
                 'likes': task.get('likes', 0),
                 'comments': task.get('comments', 0),
@@ -284,8 +287,23 @@ def run_sync():
                 'created_by': task.get('created_by'),
                 'year_month': task.get('year_month'),
             }
+            existing = existing_tasks.get(task_data.get("task_id"))
+            if existing:
+                if not task_data.get("content"):
+                    task_data["content"] = existing.get("content")
+                if not task_data.get("title"):
+                    task_data["title"] = existing.get("title")
             if members_db.upsert_task(task_data):
                 tasks_synced += 1
+
+        try:
+            from generate_titles import generate_missing_titles
+            titles_csv = project_root / "database" / "coordinated_tasks.csv"
+            titles_updated = generate_missing_titles(titles_csv)
+            if titles_updated:
+                logger.info("Generated %s missing titles", titles_updated)
+        except Exception as e:
+            logger.warning(f"Title generation skipped: {e}")
 
         x_rows = _fetch_sheet(activity_spreadsheet, month_tab, "A:I")
         x_activities = parser.parse_x_activity_log(x_rows)

@@ -22,6 +22,13 @@ logger = setup_logger(__name__)
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'cyber-dashboard-2-secret'
 
+# Load .env if available (optional dependency)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except Exception:
+    pass
+
 # Database paths (relative to project root)
 DB_DIR = project_root / "database"
 MEMBERS_DB = str(DB_DIR / "members.csv")
@@ -43,10 +50,10 @@ def index():
     """Dashboard home - overview stats"""
     try:
         current_month = datetime.now().strftime('%Y-%m')
+        selected_month = request.args.get('month', current_month)
 
-        # Get overview stats
+        # Get overview stats for current month
         tasks = members_service.get_tasks_for_month(current_month) if members_service else []
-        activities = members_service.get_combined_activity_history(current_month) if members_service else []
 
         def parse_int(value):
             try:
@@ -54,41 +61,68 @@ def index():
             except (TypeError, ValueError):
                 return 0
 
-        def is_content_activity(activity):
-            activity_type = (activity.get('activity_type') or '').strip().lower()
-            return activity_type not in {'comment', 'reply', 'quote', 'repost', 'retweet'}
-
+        # Count posts from tasks (not activities)
         impressions_total = sum(parse_int(task.get('impressions')) for task in tasks)
-        content_activities = [a for a in activities if is_content_activity(a)]
-        x_posts = [a for a in content_activities if a.get('platform') == 'x']
-        reddit_posts = [a for a in content_activities if a.get('platform') == 'reddit']
+        x_posts_count = len([t for t in tasks if t.get('platform') == 'x' and t.get('task_type') == 'content'])
+        reddit_posts_count = len([t for t in tasks if t.get('platform') == 'reddit' and t.get('task_type') == 'content'])
 
         # Calculate stats
         stats = {
             'impressions_total': impressions_total,
-            'x_posts': len(x_posts),
-            'reddit_posts': len(reddit_posts),
+            'x_posts': x_posts_count,
+            'reddit_posts': reddit_posts_count,
         }
 
-        # Get all tasks (not just current month) and sort by impressions
-        all_tasks = members_service.get_tasks_for_month('') if members_service else []
+        # Get content posts for selected month (or all if no month selected)
+        if members_service and selected_month == current_month:
+            all_tasks = tasks
+        else:
+            all_tasks = members_service.get_tasks_for_month(selected_month) if members_service else []
 
-        # Sort tasks by impressions (convert to int, default to 0)
+        # Filter only content type tasks
+        content_tasks = [t for t in all_tasks if t.get('task_type') == 'content']
+
+        # Sort by impressions (convert to int, default to 0)
         def get_impressions(task):
             try:
                 return int(str(task.get('impressions', 0)).replace(',', '').strip() or 0)
             except:
                 return 0
 
-        top_posts = sorted(all_tasks, key=get_impressions, reverse=True)[:10]
+        content_tasks_sorted = sorted(content_tasks, key=get_impressions, reverse=True)
 
-        return render_template('index.html',
-                             stats=stats,
-                             top_posts=top_posts,
-                             current_month=current_month)
+        # Separate by platform
+        x_posts = [t for t in content_tasks_sorted if t.get('platform') == 'x']
+        reddit_posts = [t for t in content_tasks_sorted if t.get('platform') == 'reddit']
+
+        # Get available months from all tasks
+        if members_service and not selected_month:
+            all_months_tasks = all_tasks
+        else:
+            all_months_tasks = members_service.get_tasks_for_month('') if members_service else []
+        available_months = sorted(set(t.get('year_month') for t in all_months_tasks if t.get('year_month')), reverse=True)
+
+        for post in x_posts + reddit_posts:
+            post["display_title"] = (
+                post.get("title")
+                or post.get("content")
+                or post.get("description")
+                or post.get("target_url")
+                or "Untitled Post"
+            )
+
+        return render_template(
+            'index.html',
+            stats=stats,
+            x_posts=x_posts,
+            reddit_posts=reddit_posts,
+            current_month=current_month,
+            selected_month=selected_month,
+            available_months=available_months,
+        )
     except Exception as e:
         logger.error(f"Error loading dashboard: {e}")
-        return render_template('index.html', stats={}, top_posts=[])
+        return render_template('index.html', stats={}, x_posts=[], reddit_posts=[], available_months=[])
 
 
 @app.route('/members')
@@ -96,6 +130,41 @@ def members():
     """Members page"""
     try:
         all_members = members_service.get_all_members() if members_service else []
+
+        # Calculate activity stats for each member
+        for member in all_members:
+            discord_user = member.get('discord_user')
+            if not discord_user:
+                continue
+
+            # Get all activities for this member
+            x_activities = members_service.get_x_activities_by_member(discord_user) if members_service else []
+            reddit_activities = members_service.get_reddit_activities_by_member(discord_user) if members_service else []
+
+            # Count activity types for X
+            x_comments = len([a for a in x_activities if a.get('activity_type', '').lower() in ['comment', 'reply']])
+            x_quotes = len([a for a in x_activities if a.get('activity_type', '').lower() == 'quote'])
+            x_retweets = len([a for a in x_activities if a.get('activity_type', '').lower() in ['retweet', 'repost']])
+
+            # Count Reddit comments
+            reddit_comments = len([a for a in reddit_activities if a.get('activity_type', '').lower() in ['comment', 'reply']])
+
+            # Add stats to member object
+            member['x_comments'] = x_comments
+            member['x_quotes'] = x_quotes
+            member['x_retweets'] = x_retweets
+            member['reddit_comments'] = reddit_comments
+            member['total_contributions'] = x_comments + x_quotes + x_retweets + reddit_comments
+
+        all_members.sort(
+            key=lambda m: (
+                m.get('total_contributions', 0),
+                (m.get('last_active') or ''),
+                (m.get('discord_user') or '').lower(),
+            ),
+            reverse=True,
+        )
+
         return render_template('members.html', members=all_members)
     except Exception as e:
         logger.error(f"Error loading members: {e}")
@@ -108,6 +177,15 @@ def tasks():
     try:
         month = request.args.get('month', datetime.now().strftime('%Y-%m'))
         all_tasks = members_service.get_tasks_for_month(month) if members_service else []
+        for task in all_tasks:
+            task["display_title"] = (
+                task.get("title")
+                or task.get("content")
+                or task.get("description")
+                or task.get("target_url")
+                or task.get("task_id")
+                or "Untitled Task"
+            )
         return render_template('tasks.html', tasks=all_tasks, month=month)
     except Exception as e:
         logger.error(f"Error loading tasks: {e}")
@@ -149,19 +227,15 @@ def api_stats():
             except (TypeError, ValueError):
                 return 0
 
-        def is_content_activity(activity):
-            activity_type = (activity.get('activity_type') or '').strip().lower()
-            return activity_type not in {'comment', 'reply', 'quote', 'repost', 'retweet'}
-
+        # Count posts from tasks (not activities)
         impressions_total = sum(parse_int(task.get('impressions')) for task in tasks)
-        content_activities = [a for a in activities if is_content_activity(a)]
-        x_posts = [a for a in content_activities if a.get('platform') == 'x']
-        reddit_posts = [a for a in content_activities if a.get('platform') == 'reddit']
+        x_posts_count = len([t for t in tasks if t.get('platform') == 'x' and t.get('task_type') == 'content'])
+        reddit_posts_count = len([t for t in tasks if t.get('platform') == 'reddit' and t.get('task_type') == 'content'])
 
         return jsonify({
             'impressions_total': impressions_total,
-            'x_posts': len(x_posts),
-            'reddit_posts': len(reddit_posts),
+            'x_posts': x_posts_count,
+            'reddit_posts': reddit_posts_count,
         })
     except Exception as e:
         logger.error(f"API error: {e}")

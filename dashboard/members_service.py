@@ -28,6 +28,8 @@ DEFAULT_TASK_FIELDS = [
     "action_type",
     "target_url",
     "description",
+    "content",
+    "title",
     "is_active",
     "created_date",
     "created_by",
