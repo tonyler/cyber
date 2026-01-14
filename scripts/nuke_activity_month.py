@@ -9,26 +9,20 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
+import sys
 from pathlib import Path
 from datetime import datetime
 
+# Add shared to path for config import
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent
+sys.path.insert(0, str(_project_root / "shared"))
 
-PROJECT_ROOT = Path(__file__).parent.parent
+from config import PROJECT_ROOT, CREDENTIALS_FILE, activity_sheet_id as get_activity_sheet_id, load_env
+
+load_env()
+
 DASHBOARD_DIR = PROJECT_ROOT / "dashboard"
-
-
-def load_env_value(env_path: Path, key: str) -> str:
-    if not env_path.exists():
-        return ""
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        if k.strip() == key:
-            return v.strip().strip('"').strip("'")
-    return ""
 
 
 def month_tab_from_date(date_str: str, format_str: str) -> str | None:
@@ -66,15 +60,9 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    env_path = DASHBOARD_DIR / ".env"
-    activity_sheet_id = (
-        os.getenv("ACTIVITY_SHEET_ID")
-        or load_env_value(env_path, "ACTIVITY_SHEET_ID")
-        or os.getenv("SPREADSHEET_ID")
-        or load_env_value(env_path, "SPREADSHEET_ID")
-    )
+    activity_sheet_id = get_activity_sheet_id()
     if not activity_sheet_id:
-        print("Missing ACTIVITY_SHEET_ID/SPREADSHEET_ID in environment.")
+        print("Missing ACTIVITY_SHEET_ID in .env")
         return 1
 
     config_file = DASHBOARD_DIR / "sync_config.json"
@@ -86,7 +74,7 @@ def main() -> int:
         except Exception as exc:
             print(f"Warning: could not read sync_config.json: {exc}")
 
-    credentials_file = PROJECT_ROOT / "shared" / "credentials" / "google.json"
+    credentials_file = CREDENTIALS_FILE
     if not credentials_file.exists():
         print(f"Google credentials not found at {credentials_file}")
         return 1

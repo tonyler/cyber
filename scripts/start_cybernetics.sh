@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-DASHBOARD_DIR="$PROJECT_ROOT/dashboard"
+DASHBOARD_DIR="${CYBER_DASHBOARD_DIR:-$PROJECT_ROOT/dashboard3}"
 LOGS_DIR="$PROJECT_ROOT/logs"
 ROOT_VENV="$PROJECT_ROOT/venv"
 DEPS_MARKER="$ROOT_VENV/.deps_installed"
@@ -45,8 +45,8 @@ echo "========================================"
 # Create logs directory if it doesn't exist
 mkdir -p "$LOGS_DIR"
 
-if [ ! -f "$DASHBOARD_DIR/.env" ]; then
-    log_warn ".env file not found at $DASHBOARD_DIR/.env (dashboard + sync will be skipped)"
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    log_warn ".env file not found at $PROJECT_ROOT/.env (dashboard + sync will be skipped)"
     ENABLE_DASHBOARD=0
 else
     ENABLE_DASHBOARD=1
@@ -115,7 +115,7 @@ fi
 
 if [ "${ENABLE_DASHBOARD:-0}" -eq 1 ]; then
     echo ""
-    echo "Starting Flask Dashboard (Cyberpunk UI + Stats DB)..."
+    echo "Starting Flask Dashboard 2.0..."
     start_with_pidfile "Dashboard" "$LOGS_DIR/dashboard.pid" \
         "$ROOT_VENV/bin/python3" "$DASHBOARD_APP"
 fi

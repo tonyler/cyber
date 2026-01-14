@@ -6,17 +6,21 @@ Ensures consistent column structure, header row, and removes malformed rows.
 
 import argparse
 import json
-import os
+import sys
 import time
 from pathlib import Path
 from datetime import datetime
 
 import gspread
 
-PROJECT_ROOT = Path("/root/cyber")
-DASHBOARD_DIR = PROJECT_ROOT / "dashboard"
-ENV_PATH = DASHBOARD_DIR / ".env"
-CONFIG_PATH = DASHBOARD_DIR / "sync_config.json"
+# Add shared to path for config import
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent
+sys.path.insert(0, str(_project_root / "shared"))
+
+from config import PROJECT_ROOT, CREDENTIALS_FILE, get_env
+
+CONFIG_PATH = PROJECT_ROOT / "dashboard" / "sync_config.json"
 
 EXPECTED_HEADER = [
     "Date",
@@ -36,19 +40,6 @@ EXPECTED_HEADER = [
     "Notes",
     "Total Impressions",
 ]
-
-
-def load_env_value(env_path: Path, key: str) -> str:
-    if not env_path.exists():
-        return ""
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        if k.strip() == key:
-            return v.strip().strip('"').strip("'")
-    return ""
 
 
 def current_month_tab() -> str:
@@ -151,11 +142,11 @@ def main() -> None:
     parser.add_argument("--purge-activity", action="store_true", help="Remove activity-log rows from the tab")
     args = parser.parse_args()
 
-    tasks_sheet_id = args.sheet_id or os.getenv("TASKS_SHEET_ID") or load_env_value(ENV_PATH, "TASKS_SHEET_ID")
+    tasks_sheet_id = args.sheet_id or get_env("TASKS_SHEET_ID")
     if not tasks_sheet_id:
-        raise SystemExit("Missing TASKS_SHEET_ID in args, environment, or dashboard/.env")
+        raise SystemExit("Missing TASKS_SHEET_ID in args or .env")
 
-    credentials_file = PROJECT_ROOT / "shared" / "credentials" / "google.json"
+    credentials_file = CREDENTIALS_FILE
     if not credentials_file.exists():
         raise SystemExit(f"Missing credentials at {credentials_file}")
 

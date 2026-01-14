@@ -21,7 +21,7 @@ Discord bot that manages content raids and member registrations using Google She
 Files:
 - `shared/config/bot_config.json` holds Google Sheet IDs and optional channel IDs.
 - `shared/credentials/google.json` is the Google service account credentials file.
-- `.env` must define the Discord bot token in `KEY`.
+- `.env` must define the Discord bot token in `DISCORD_TOKEN` (legacy `KEY` still supported).
 
 Example `bot_config.json`:
 ```json
@@ -37,7 +37,7 @@ Example `bot_config.json`:
 
 1. Create and share the Google Sheets with the service account email.
 2. Place the service account JSON at `shared/credentials/google.json`.
-3. Create `.env` with `KEY=your_discord_bot_token`.
+3. Create `.env` with `DISCORD_TOKEN=your_discord_bot_token` (or legacy `KEY=...`).
 4. Install dependencies and run:
    - From `bot/` use `pip install -r requirements.txt`.
    - Start with `python bot.py` or `./start.sh`.

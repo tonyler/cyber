@@ -38,11 +38,12 @@ else
     echo "Warning: requirements.txt not found at $PROJECT_ROOT; skipping dependency install."
 fi
 
-# Check if .env exists
-if [ ! -f ".env" ]; then
-    echo "Error: .env file not found!"
-    echo "Please create .env with your Discord bot token:"
-    echo "KEY=your_discord_bot_token_here"
+# Check if .env exists (project root)
+if [ ! -f "$PROJECT_ROOT/.env" ]; then
+    echo "Error: .env file not found in project root!"
+    echo "Please create $PROJECT_ROOT/.env with your Discord bot token:"
+    echo "DISCORD_TOKEN=your_discord_bot_token_here"
+    echo "(Legacy: KEY=your_discord_bot_token_here)"
     exit 1
 fi
 

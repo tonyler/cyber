@@ -15,18 +15,12 @@ from typing import Dict, List, Optional
 import sys
 import urllib.request
 
+# Add shared to path for config import
+_script_dir = Path(__file__).resolve().parent
+_project_root = _script_dir.parent
+sys.path.insert(0, str(_project_root / "shared"))
 
-def _load_env_file(path: Path) -> None:
-    if not path.exists():
-        return
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ[key] = value
+from config import load_env, get_env
 
 
 def _generate_short_title_openai(content: str, max_words: int, model: str, api_key: str) -> str:
@@ -125,35 +119,29 @@ def generate_missing_titles(
     csv_path: Path,
     limit: Optional[int] = None,
     sleep_seconds: float = 0.0,
-    env_paths: Optional[List[Path]] = None,
 ) -> int:
     project_root = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(project_root / "dashboard"))
     from csv_store import locked_csv, merge_fieldnames
 
-    resolved_env_paths = env_paths or [
-        project_root / ".env",
-        project_root / "dashboard2" / ".env",
-    ]
-    for env_path in resolved_env_paths:
-        _load_env_file(env_path)
+    load_env()
 
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    openai_key = get_env("OPENAI_API_KEY")
+    groq_key = get_env("GROQ_API_KEY")
     if not openai_key and not groq_key:
         return 0
 
     if openai_key:
         provider = "openai"
         api_key = openai_key
-        model = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
+        model = get_env("OPENAI_MODEL", "gpt-4o-mini")
     else:
         provider = "groq"
         api_key = groq_key
-        model = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant").strip()
+        model = get_env("GROQ_MODEL", "llama-3.1-8b-instant")
 
-    max_words_raw = os.getenv("GROQ_TITLE_MAX_WORDS", "8").strip()
-    max_per_request_raw = os.getenv("GROQ_TITLE_MAX_PER_REQUEST", "6").strip()
+    max_words_raw = get_env("GROQ_TITLE_MAX_WORDS", "8")
+    max_per_request_raw = get_env("GROQ_TITLE_MAX_PER_REQUEST", "6")
 
     try:
         max_words = max(1, min(12, int(max_words_raw)))
@@ -216,15 +204,10 @@ def main() -> None:
     default_csv = project_root / "database" / "coordinated_tasks.csv"
     csv_path = Path(args.csv) if args.csv else default_csv
 
-    env_paths = [
-        project_root / ".env",
-        project_root / "dashboard2" / ".env",
-    ]
-    for env_path in env_paths:
-        _load_env_file(env_path)
+    load_env()
 
-    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
-    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    openai_key = get_env("OPENAI_API_KEY")
+    groq_key = get_env("GROQ_API_KEY")
     if not openai_key and not groq_key:
         raise SystemExit("Missing OPENAI_API_KEY or GROQ_API_KEY in .env")
 
@@ -234,7 +217,6 @@ def main() -> None:
             csv_path=csv_path,
             limit=args.limit,
             sleep_seconds=args.sleep,
-            env_paths=env_paths,
         )
     except Exception as exc:
         print(f"Title generation error: {exc}")

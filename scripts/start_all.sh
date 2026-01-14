@@ -20,9 +20,8 @@ echo "========================================"
 
 # Start dashboard + sync daemon (system script)
 if [ -f "$SCRIPT_DIR/start_cybernetics.sh" ]; then
-    if ! bash "$SCRIPT_DIR/start_cybernetics.sh"; then
+    CYBER_DASHBOARD_DIR="$PROJECT_ROOT/dashboard3" bash "$SCRIPT_DIR/start_cybernetics.sh" || \
         log_warn "Cybernetics core failed to start; continuing with remaining services."
-    fi
 else
     log_warn "Missing start_cybernetics.sh; skipping core services."
 fi
@@ -41,8 +40,8 @@ fi
 if [ ! -f "$LOGS_DIR/bot.pid" ]; then
     if [ ! -f "$PROJECT_ROOT/bot/start.sh" ] || [ ! -f "$PROJECT_ROOT/bot/bot.py" ]; then
         log_warn "Bot entrypoint missing; skipping Discord bot."
-    elif [ ! -f "$PROJECT_ROOT/bot/.env" ]; then
-        log_warn "Bot .env missing; skipping Discord bot."
+    elif [ ! -f "$PROJECT_ROOT/.env" ]; then
+        log_warn "Project .env missing at $PROJECT_ROOT/.env; skipping Discord bot."
     elif [ ! -f "$PROJECT_ROOT/shared/credentials/google.json" ]; then
         log_warn "Google credentials missing at $PROJECT_ROOT/shared/credentials/google.json; skipping Discord bot."
     else
@@ -85,7 +84,7 @@ echo ""
 echo "========================================"
 echo "✅ Full stack started"
 echo "========================================"
-echo "Dashboard URL: http://localhost:5002"
+echo "Dashboard URL: http://localhost:5004"
 echo "Logs:"
 echo "  Sync: $LOGS_DIR/sync_daemon.log"
 echo "  Dashboard: $LOGS_DIR/dashboard.log"

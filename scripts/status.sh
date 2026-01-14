@@ -6,7 +6,9 @@ echo "Cybernetics System Status"
 echo "========================================"
 echo ""
 
-LOGS_DIR="/root/cyber/logs"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+LOGS_DIR="$PROJECT_ROOT/logs"
 
 # Check Bot
 echo "Discord Bot:"
@@ -46,7 +48,7 @@ if [ -f "$LOGS_DIR/dashboard.pid" ]; then
     DASH_PID=$(cat "$LOGS_DIR/dashboard.pid")
     if ps -p "$DASH_PID" > /dev/null 2>&1; then
         echo "  ✅ Running (PID: $DASH_PID)"
-        echo "  URL: http://localhost:5002"
+        echo "  URL: http://localhost:5003"
         echo "  Log: $LOGS_DIR/dashboard.log"
     else
         echo "  ❌ Not running (stale PID file)"

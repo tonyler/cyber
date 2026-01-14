@@ -10,27 +10,25 @@ from pathlib import Path
 import sys
 
 # Add project paths
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root / "dashboard"))
+_app_dir = Path(__file__).resolve().parent
+_project_root = _app_dir.parent
+sys.path.insert(0, str(_project_root / "shared"))
+sys.path.insert(0, str(_project_root / "dashboard"))
 
+from config import PROJECT_ROOT, DATABASE_DIR, flask_secret_key, load_env
 from logger_config import setup_logger
 from members_service import MembersDBService
 from links_service import LinksDBService
 
+load_env()
+
 logger = setup_logger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'cyber-dashboard-2-secret'
+app.config['SECRET_KEY'] = flask_secret_key()
 
-# Load .env if available (optional dependency)
-try:
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent / ".env")
-except Exception:
-    pass
-
-# Database paths (relative to project root)
-DB_DIR = project_root / "database"
+# Database paths
+DB_DIR = DATABASE_DIR
 MEMBERS_DB = str(DB_DIR / "members.csv")
 LINKS_DB = str(DB_DIR / "links.csv")
 

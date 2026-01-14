@@ -6,18 +6,28 @@ Sync Worker - Periodically syncs data from Google Sheets to local database
 import sys
 import time
 import json
-import os
 import csv
 from collections import defaultdict
 from pathlib import Path
 from datetime import datetime
 
 # Add paths
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).resolve().parent.parent
 dashboard_dir = project_root / "dashboard"
+sys.path.insert(0, str(project_root / "shared"))
 sys.path.insert(0, str(dashboard_dir))
 
+from config import (
+    PROJECT_ROOT,
+    CREDENTIALS_FILE,
+    members_sheet_id as get_members_sheet_id,
+    tasks_sheet_id as get_tasks_sheet_id,
+    activity_sheet_id as get_activity_sheet_id,
+    load_env,
+)
 from logger_config import setup_logger
+
+load_env()
 
 logger = setup_logger(__name__)
 
@@ -33,20 +43,6 @@ except Exception as e:
     logger.warning(f"Could not load sync config: {e}, using defaults")
     interval_minutes = 30
     enabled = True
-
-def _load_env_value(env_path: Path, key: str) -> str:
-    if not env_path.exists():
-        return ""
-
-    for line in env_path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        if k.strip() == key:
-            return v.strip().strip('"').strip("'")
-    return ""
-
 
 def _fetch_sheet(spreadsheet, sheet_name: str, range_name: str = None):
     try:
@@ -202,18 +198,15 @@ def run_sync():
         logger.info(f"Starting sync cycle at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
 
-        env_path = dashboard_dir / ".env"
-        members_sheet_id = os.getenv("MEMBERS_SHEET_ID") or _load_env_value(env_path, "MEMBERS_SHEET_ID")
-        tasks_sheet_id = os.getenv("TASKS_SHEET_ID") or _load_env_value(env_path, "TASKS_SHEET_ID")
-        activity_sheet_id = os.getenv("ACTIVITY_SHEET_ID") or _load_env_value(env_path, "ACTIVITY_SHEET_ID")
-        if not activity_sheet_id:
-            activity_sheet_id = os.getenv("SPREADSHEET_ID") or _load_env_value(env_path, "SPREADSHEET_ID")
+        members_sheet_id = get_members_sheet_id()
+        tasks_sheet_id = get_tasks_sheet_id()
+        activity_sheet_id = get_activity_sheet_id()
 
         if not members_sheet_id or not tasks_sheet_id or not activity_sheet_id:
-            logger.error("Missing sheet IDs; sync cannot proceed")
+            logger.error("Missing sheet IDs in .env; sync cannot proceed")
             return
 
-        credentials_file = project_root / "shared" / "credentials" / "google.json"
+        credentials_file = CREDENTIALS_FILE
         if not credentials_file.exists():
             logger.error(f"Google credentials not found at {credentials_file}")
             return

@@ -3,19 +3,25 @@ from discord import app_commands
 from discord.ext import commands
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from dotenv import load_dotenv
-import os
+import sys
 import json
+from pathlib import Path
 from datetime import datetime
 import logging
 
-load_dotenv('.env')
+# Add shared to path for config import
+_bot_dir = Path(__file__).resolve().parent
+_project_root = _bot_dir.parent
+sys.path.insert(0, str(_project_root / "shared"))
+
+from config import BOT_CONFIG_FILE, CREDENTIALS_FILE, discord_token, load_env
+
+load_env()
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("discord").setLevel(logging.DEBUG)
 
-config_path = os.path.join('..', 'shared', 'config', 'bot_config.json')
-with open(config_path) as f:
+with open(BOT_CONFIG_FILE) as f:
     config = json.load(f)
 
 PLATFORMS = {
@@ -26,8 +32,7 @@ PLATFORMS = {
 PLATFORM_EMOJIS = {'X': '🐦', 'Reddit': '🔴'}
 
 SCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-credentials_path = os.path.join('..', 'shared', 'credentials', 'google.json')
-CREDS = ServiceAccountCredentials.from_json_keyfile_name(credentials_path, SCOPES)
+CREDS = ServiceAccountCredentials.from_json_keyfile_name(str(CREDENTIALS_FILE), SCOPES)
 SHEETS_CLIENT = gspread.authorize(CREDS)
 
 intents = discord.Intents.default()
@@ -245,7 +250,7 @@ async def setup():
 async def main():
     async with bot:
         await setup()
-        await bot.start(os.getenv('KEY'))
+        await bot.start(discord_token())
 
 if __name__ == '__main__':
     import asyncio
