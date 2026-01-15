@@ -2,7 +2,7 @@
 # Quick start script for Cybernetics Dashboard 3.0
 
 echo "🚀 Starting Cybernetics Dashboard 3.0..."
-echo "📍 Running on http://localhost:5004"
+echo "📍 Running on http://localhost:5002"
 echo ""
 echo "Keyboard shortcuts:"
 echo "  Alt + H  →  Dashboard"

@@ -315,5 +315,5 @@ def health():
 
 
 if __name__ == '__main__':
-    logger.info("Starting Dashboard 3.0 on port 5004")
-    app.run(host='0.0.0.0', port=5004, debug=False)
+    logger.info("Starting Dashboard 3.0 on port 5002")
+    app.run(host='0.0.0.0', port=5002, debug=False)

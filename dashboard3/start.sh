@@ -15,7 +15,7 @@ if [ -f "${PID_FILE}" ]; then
     if [ -n "${existing_pid}" ] && kill -0 "${existing_pid}" 2>/dev/null; then
         echo "⚠️  Dashboard is already running! (PID: ${existing_pid})"
         echo ""
-        echo "Access at: http://localhost:5004"
+        echo "Access at: http://localhost:5002"
         echo ""
         echo "To restart: ./stop.sh && ./start.sh"
         exit 0
@@ -36,7 +36,7 @@ if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
     echo "✅ Dashboard 3.0 is now running!"
     echo ""
     echo "🌐 Access the dashboard:"
-    echo "   http://localhost:5004"
+    echo "   http://localhost:5002"
     echo ""
     echo "📝 View logs: tail -f ${LOG_FILE}"
     echo "📊 Check status: ./status.sh"
