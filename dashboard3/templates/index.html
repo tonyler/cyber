@@ -8,7 +8,6 @@
         <!-- Hero Section -->
         <div class="mb-6 sm:mb-8">
             <h1 class="text-4xl font-display font-bold text-cyan-400 mb-2 neon-text">DASHBOARD</h1>
-            <p class="text-slate-300">Overview of raid coordination and member activity</p>
         </div>
 
         <!-- Month Filter -->
@@ -283,24 +282,216 @@
     </div>
 
     <aside class="mt-8 lg:mt-0 flex flex-col gap-6">
-        <div class="glass-effect rounded-2xl p-6 border border-cyan-500/20 flex flex-col overflow-hidden h-[360px]">
-            <div class="flex items-center justify-between">
-                <h2 class="text-xl font-display font-bold text-cyan-300">Analytics Panel</h2>
-                <span class="text-xs text-slate-400">Coming soon</span>
-            </div>
-            <div class="flex-1 mt-4 rounded-xl border border-dashed border-cyan-500/30 bg-slate-900/40 flex items-center justify-center text-slate-400 overflow-hidden">
-                Graphs + stats live here
-            </div>
-        </div>
-        <div class="glass-effect rounded-2xl p-6 border border-cyan-500/20 flex flex-col overflow-hidden h-[360px]">
+        <div class="glass-effect rounded-2xl p-6 border border-cyan-500/20 flex flex-col overflow-hidden h-auto">
             <div class="flex items-center justify-between">
                 <h2 class="text-xl font-display font-bold text-cyan-300">Performance Panel</h2>
-                <span class="text-xs text-slate-400">Coming soon</span>
+                <span class="text-xs text-slate-400 uppercase tracking-wider">{{ performance_month or '—' }}</span>
             </div>
-            <div class="flex-1 mt-4 rounded-xl border border-dashed border-cyan-500/30 bg-slate-900/40 flex items-center justify-center text-slate-400 overflow-hidden">
-                Charts + rollups here
+            <div class="grid gap-6 mt-4">
+                <section class="space-y-3">
+                    <div class="flex items-center justify-between text-sm font-semibold text-slate-200">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
+                            Views per day
+                        </div>
+                        <span class="text-xs text-slate-500 uppercase tracking-[0.2em]">Snapshots & Δ</span>
+                    </div>
+                    <div class="relative h-40">
+                        <canvas id="performance-views-chart" class="w-full h-full rounded-xl border border-dashed border-cyan-500/30 bg-slate-900/40"></canvas>
+                        <div id="performance-views-empty" class="hidden absolute inset-0 rounded-xl border border-dashed border-slate-700 bg-slate-900/80 flex flex-col items-center justify-center text-slate-500 text-sm">
+                            <span>No view snapshots yet</span>
+                            <small class="text-xs text-slate-500/70 mt-1">Snapshots appear at 00:00 UTC</small>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 text-[0.65rem] text-slate-400 uppercase tracking-[0.2em]">
+                        <div>
+                            <div class="text-slate-500">Latest</div>
+                            <div id="performance-views-date" class="text-white font-semibold text-lg">—</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-500">Delta</div>
+                            <div id="performance-views-diff" class="text-white font-semibold text-lg">—</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-500">Total</div>
+                            <div id="performance-views-total" class="text-white font-semibold text-lg">—</div>
+                        </div>
+                    </div>
+                </section>
+                <section class="space-y-3">
+                    <div class="flex items-center justify-between text-sm font-semibold text-slate-200">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-purple-400 inline-block"></span>
+                            Actions per day
+                        </div>
+                        <span class="text-xs text-slate-500 uppercase tracking-[0.2em]">Member contributions</span>
+                    </div>
+                    <div class="relative h-40">
+                        <canvas id="performance-actions-chart" class="w-full h-full rounded-xl border border-dashed border-slate-700 bg-slate-900/75"></canvas>
+                        <div id="performance-actions-empty" class="hidden absolute inset-0 rounded-xl border border-dashed border-slate-700 bg-slate-900/80 flex flex-col items-center justify-center text-slate-500 text-sm">
+                            <span>No action snapshots yet</span>
+                            <small class="text-xs text-slate-500/70 mt-1">Snapshots appear at 00:00 UTC</small>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 text-[0.65rem] text-slate-400 uppercase tracking-[0.2em]">
+                        <div>
+                            <div class="text-slate-500">Latest</div>
+                            <div id="performance-actions-date" class="text-white font-semibold text-lg">—</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-500">Delta</div>
+                            <div id="performance-actions-diff" class="text-white font-semibold text-lg">—</div>
+                        </div>
+                        <div>
+                            <div class="text-slate-500">Total</div>
+                            <div id="performance-actions-total" class="text-white font-semibold text-lg">—</div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </aside>
 </div>
+
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+const viewsData = {{ views_progress | tojson }};
+const actionsData = {{ actions_progress | tojson }};
+
+const chartConfigs = [
+    {
+        canvasId: 'performance-views-chart',
+        emptyId: 'performance-views-empty',
+        dateId: 'performance-views-date',
+        diffId: 'performance-views-diff',
+        totalId: 'performance-views-total',
+        dataset: viewsData,
+        primary: 'rgba(45, 212, 191, 0.95)',
+        gradientStart: 'rgba(45, 212, 191, 0.35)',
+        gradientEnd: 'rgba(15, 23, 42, 0)',
+    },
+    {
+        canvasId: 'performance-actions-chart',
+        emptyId: 'performance-actions-empty',
+        dateId: 'performance-actions-date',
+        diffId: 'performance-actions-diff',
+        totalId: 'performance-actions-total',
+        dataset: actionsData,
+        primary: 'rgba(248, 113, 113, 0.95)',
+        gradientStart: 'rgba(248, 113, 113, 0.35)',
+        gradientEnd: 'rgba(15, 23, 42, 0)',
+    }
+];
+
+chartConfigs.forEach(config => {
+    renderPerformanceChart(config);
+});
+
+function renderPerformanceChart({
+    canvasId,
+    emptyId,
+    dateId,
+    diffId,
+    totalId,
+    dataset,
+    primary,
+    gradientStart,
+    gradientEnd,
+}) {
+    const canvas = document.getElementById(canvasId);
+    const emptyState = document.getElementById(emptyId);
+    const dateEl = document.getElementById(dateId);
+    const diffEl = document.getElementById(diffId);
+    const totalEl = document.getElementById(totalId);
+
+    if (!canvas || !dataset?.length) {
+        if (emptyState) {
+            emptyState.classList.remove('hidden');
+        }
+        return;
+    }
+
+    if (emptyState) {
+        emptyState.classList.add('hidden');
+    }
+
+    const data = dataset.map(entry => ({
+        date: entry.date,
+        total: Number(entry.total_views || entry.total_actions) || 0,
+        difference: Number(entry.difference) || 0,
+    }));
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(1, canvas.clientWidth);
+    const height = Math.max(1, canvas.clientHeight);
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+
+    const padding = 28;
+    const values = data.map(point => point.difference);
+    const maxValue = Math.max(...values, 1);
+    const minValue = Math.min(...values, 0);
+    const range = maxValue - minValue || 1;
+    const plotWidth = width - padding * 2;
+    const plotHeight = height - padding * 2;
+    const step = data.length > 1 ? plotWidth / (data.length - 1) : 0;
+    const points = data.map((point, index) => ({
+        x: padding + step * index,
+        y: padding + plotHeight - ((point.difference - minValue) / range) * plotHeight,
+    }));
+
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = primary;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    points.forEach((point, index) => {
+        if (index === 0) {
+            ctx.moveTo(point.x, point.y);
+        } else {
+            ctx.lineTo(point.x, point.y);
+        }
+    });
+    ctx.stroke();
+
+    ctx.lineTo(points[points.length - 1].x, height - padding);
+    ctx.lineTo(points[0].x, height - padding);
+    ctx.closePath();
+
+    const gradient = ctx.createLinearGradient(0, padding, 0, height - padding);
+    gradient.addColorStop(0, gradientStart);
+    gradient.addColorStop(1, gradientEnd);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    ctx.beginPath();
+    points.forEach(point => {
+        ctx.moveTo(point.x + 0.01, point.y);
+        ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+    });
+    ctx.fillStyle = primary;
+    ctx.fill();
+
+    const latest = data[data.length - 1];
+    if (dateEl) {
+        dateEl.textContent = latest?.date || '—';
+    }
+    if (diffEl) {
+        diffEl.textContent = latest ? `+${Intl.NumberFormat().format(latest.difference)}` : '—';
+    }
+    if (totalEl) {
+        totalEl.textContent = latest ? Intl.NumberFormat().format(latest.total) : '—';
+    }
+});
+</script>
 {% endblock %}

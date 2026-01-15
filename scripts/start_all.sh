@@ -81,6 +81,29 @@ if [ ! -f "$LOGS_DIR/scrapers.pid" ]; then
 fi
 
 echo ""
+echo "Starting Monthly Views Snapshot Daemon (runs at 00:00 UTC)..."
+if [ -f "$LOGS_DIR/monthly_views.pid" ]; then
+    MV_PID="$(cat "$LOGS_DIR/monthly_views.pid")"
+    if ps -p "$MV_PID" > /dev/null 2>&1; then
+        echo "✅ Monthly views daemon already running (PID: $MV_PID)"
+    else
+        rm -f "$LOGS_DIR/monthly_views.pid"
+    fi
+fi
+
+if [ ! -f "$LOGS_DIR/monthly_views.pid" ]; then
+    if [ ! -f "$PROJECT_ROOT/scripts/view_snapshot_daemon.sh" ]; then
+        log_warn "Monthly views daemon missing; skipping statistics scheduler."
+    else
+        nohup bash "$PROJECT_ROOT/scripts/view_snapshot_daemon.sh" > "$LOGS_DIR/monthly_views.log" 2>&1 &
+        MV_PID=$!
+        echo "$MV_PID" > "$LOGS_DIR/monthly_views.pid"
+        echo "✅ Monthly views daemon started (PID: $MV_PID)"
+        echo "Logs: $LOGS_DIR/monthly_views.log"
+    fi
+fi
+
+echo ""
 echo "========================================"
 echo "✅ Full stack started"
 echo "========================================"

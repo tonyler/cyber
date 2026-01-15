@@ -88,6 +88,7 @@ stop_by_pidfile "Dashboard" "$LOGS_DIR/dashboard.pid"
 stop_by_pidfile "Discord Bot" "$LOGS_DIR/bot.pid"
 stop_stray_bot_processes
 stop_by_pidfile "Scrapers" "$LOGS_DIR/scrapers.pid"
+stop_by_pidfile "Monthly Views Daemon" "$LOGS_DIR/monthly_views.pid"
 
 echo ""
 echo "========================================"

@@ -7,6 +7,7 @@ Clean, bold Flask web application for raid coordination analytics
 from flask import Flask, render_template, request, jsonify
 from datetime import datetime
 from pathlib import Path
+import csv
 import sys
 
 # Add project paths
@@ -31,6 +32,10 @@ app.config['SECRET_KEY'] = flask_secret_key()
 DB_DIR = DATABASE_DIR
 MEMBERS_DB = str(DB_DIR / "members.csv")
 LINKS_DB = str(DB_DIR / "links.csv")
+MONTHLY_VIEWS_DIR = DATABASE_DIR / "monthly_views"
+MONTHLY_ACTIONS_DIR = DATABASE_DIR / "monthly_actions"
+MONTHLY_VIEWS_DIR.mkdir(parents=True, exist_ok=True)
+MONTHLY_ACTIONS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Initialize services
 try:
@@ -41,6 +46,50 @@ except Exception as e:
     logger.error(f"Failed to initialize services: {e}")
     members_service = None
     links_service = None
+
+
+def _as_int(value: str | None) -> int:
+    if not value:
+        return 0
+    try:
+        cleaned = str(value).replace(",", "").strip()
+        return int(float(cleaned))
+    except ValueError:
+        return 0
+
+
+def _load_monthly_views(month_key: str) -> list[dict[str, str]]:
+    path = MONTHLY_VIEWS_DIR / f"{month_key}-views.csv"
+    if not path.exists():
+        return []
+    rows: list[dict[str, str]] = []
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            rows.append({
+                "date": row.get("date", ""),
+                "total_views": str(_as_int(row.get("total_views"))),
+                "difference": str(_as_int(row.get("difference"))),
+            })
+    rows.sort(key=lambda r: r.get("date", ""))
+    return rows
+
+
+def _load_monthly_actions(month_key: str) -> list[dict[str, str]]:
+    path = MONTHLY_ACTIONS_DIR / f"{month_key}-actions.csv"
+    if not path.exists():
+        return []
+    rows: list[dict[str, str]] = []
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            rows.append({
+                "date": row.get("date", ""),
+                "total_actions": str(_as_int(row.get("total_actions"))),
+                "difference": str(_as_int(row.get("difference"))),
+            })
+    rows.sort(key=lambda r: r.get("date", ""))
+    return rows
 
 
 @app.route('/')
@@ -109,6 +158,9 @@ def index():
                 or "Untitled Post"
             )
 
+        performance_month = selected_month or current_month
+        views_progress = _load_monthly_views(performance_month)
+        actions_progress = _load_monthly_actions(performance_month)
         return render_template(
             'index.html',
             stats=stats,
@@ -117,10 +169,22 @@ def index():
             current_month=current_month,
             selected_month=selected_month,
             available_months=available_months,
+            views_progress=views_progress,
+            actions_progress=actions_progress,
+            performance_month=performance_month,
         )
     except Exception as e:
         logger.error(f"Error loading dashboard: {e}")
-        return render_template('index.html', stats={}, x_posts=[], reddit_posts=[], available_months=[])
+        return render_template(
+            'index.html',
+            stats={},
+            x_posts=[],
+            reddit_posts=[],
+            available_months=[],
+            views_progress=[],
+            actions_progress=[],
+            performance_month=current_month,
+        )
 
 
 @app.route('/members')
