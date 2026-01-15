@@ -203,7 +203,7 @@ Want to add features? Here's where:
 ```bash
 pip install -r requirements.txt
 python3 app.py
-# Visit http://localhost:5004
+# Visit http://localhost:5002
 ```
 
 **Production:**

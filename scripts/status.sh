@@ -43,12 +43,12 @@ fi
 echo ""
 
 # Check Dashboard
-echo "Dashboard:"
+echo "Dashboard 3.0:"
 if [ -f "$LOGS_DIR/dashboard.pid" ]; then
     DASH_PID=$(cat "$LOGS_DIR/dashboard.pid")
     if ps -p "$DASH_PID" > /dev/null 2>&1; then
         echo "  ✅ Running (PID: $DASH_PID)"
-        echo "  URL: http://localhost:5003"
+        echo "  URL: http://localhost:5002"
         echo "  Log: $LOGS_DIR/dashboard.log"
     else
         echo "  ❌ Not running (stale PID file)"

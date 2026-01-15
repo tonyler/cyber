@@ -16,7 +16,7 @@ if [ -f "${PID_FILE}" ] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
     ps -p "${pid}" -o pid=,pcpu=,pmem= | awk '{print "   PID: " $1 "  CPU: " $2 "%  MEM: " $3 "%"}'
     echo ""
     echo "🌐 Access URL:"
-    echo "   http://localhost:5004"
+    echo "   http://localhost:5002"
     echo ""
     echo "📝 Recent logs:"
     if [ -f "${LOG_FILE}" ]; then

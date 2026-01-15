@@ -27,7 +27,7 @@ Modern, professional dashboard for raid coordination and member activity trackin
 
 3. **Open in browser**:
    ```
-   http://your-server-ip:5004
+   http://your-server-ip:5002
    ```
 
 4. **Stop the dashboard**:
@@ -35,7 +35,7 @@ Modern, professional dashboard for raid coordination and member activity trackin
    ./stop.sh
    ```
 
-**Note**: Port 5004 must be open in your firewall. Run `sudo ufw allow 5004/tcp` if needed.
+**Note**: Port 5002 must be open in your firewall. Run `sudo ufw allow 5002/tcp` if needed.
 
 ## Pages
 
