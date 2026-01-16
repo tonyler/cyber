@@ -10,6 +10,23 @@ from pathlib import Path
 import csv
 import sys
 
+
+class ReverseProxied:
+    """Middleware to handle reverse proxy with subpath (e.g., /cyber)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    def __call__(self, environ, start_response):
+        script_name = environ.get("HTTP_X_SCRIPT_NAME", "")
+        if script_name:
+            environ["SCRIPT_NAME"] = script_name
+            path_info = environ.get("PATH_INFO", "")
+            if path_info.startswith(script_name):
+                environ["PATH_INFO"] = path_info[len(script_name):]
+        return self.app(environ, start_response)
+
+
 # Add project paths
 _app_dir = Path(__file__).resolve().parent
 _project_root = _app_dir.parent
@@ -26,6 +43,7 @@ logger = setup_logger(__name__)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = flask_secret_key()
+app.wsgi_app = ReverseProxied(app.wsgi_app)
 
 # Database paths
 DB_DIR = DATABASE_DIR

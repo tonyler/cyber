@@ -3,7 +3,7 @@
 {% block title %}Dashboard - Cybernetics{% endblock %}
 
 {% block content %}
-<div class="lg:grid lg:grid-cols-2 lg:gap-8">
+<div class="lg:grid lg:grid-cols-2 gap-6 lg:gap-10 xl:gap-14">
     <div class="flex flex-col">
         <!-- Hero Section -->
         <div class="mb-6 sm:mb-8">
@@ -29,7 +29,7 @@
         </div>
 
         <!-- Stats Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 xl:gap-8 mb-6 sm:mb-8">
     <!-- Impressions / Views -->
     <div class="stat-card group">
         <div class="flex items-center justify-between mb-4">
@@ -116,9 +116,9 @@
                         {% endif %}
                     </h3>
 
-                    <div class="flex flex-wrap items-center gap-6 mt-1">
+                    <div class="flex flex-wrap items-center gap-6 mt-1 lg:grid lg:grid-cols-3 lg:gap-4">
                         {% if post.impressions %}
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center space-x-2.5 lg:justify-center lg:py-3 lg:px-4 lg:rounded-xl lg:bg-slate-800/30 lg:border lg:border-cyan-500/20">
                             <div class="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 rounded-lg flex items-center justify-center border border-cyan-500/40 shadow-lg shadow-cyan-500/10">
                                 <svg class="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"></path>
@@ -133,7 +133,7 @@
                         {% endif %}
 
                         {% if post.likes %}
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center space-x-2.5 lg:justify-center lg:py-3 lg:px-4 lg:rounded-xl lg:bg-slate-800/30 lg:border lg:border-pink-500/20">
                             <div class="w-10 h-10 bg-gradient-to-br from-pink-500/20 to-pink-600/20 rounded-lg flex items-center justify-center border border-pink-500/40 shadow-lg shadow-pink-500/10">
                                 <svg class="w-5 h-5 text-pink-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path>
@@ -147,7 +147,7 @@
                         {% endif %}
 
                         {% if post.comments %}
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center space-x-2.5 lg:justify-center lg:py-3 lg:px-4 lg:rounded-xl lg:bg-slate-800/30 lg:border lg:border-blue-500/20">
                             <div class="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-lg flex items-center justify-center border border-blue-500/40 shadow-lg shadow-blue-500/10">
                                 <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"></path>
@@ -220,9 +220,9 @@
                         {% endif %}
                     </h3>
 
-                    <div class="flex flex-wrap items-center gap-6 mt-1">
+                    <div class="flex flex-wrap items-center gap-6 mt-1 lg:grid lg:grid-cols-3 lg:gap-4">
                         {% if post.impressions %}
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center space-x-2.5 lg:justify-center lg:py-3 lg:px-4 lg:rounded-xl lg:bg-slate-800/30 lg:border lg:border-cyan-500/20">
                             <div class="w-10 h-10 bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 rounded-lg flex items-center justify-center border border-cyan-500/40 shadow-lg shadow-cyan-500/10">
                                 <svg class="w-5 h-5 text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"></path>
@@ -237,7 +237,7 @@
                         {% endif %}
 
                         {% if post.likes %}
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center space-x-2.5 lg:justify-center lg:py-3 lg:px-4 lg:rounded-xl lg:bg-slate-800/30 lg:border lg:border-pink-500/20">
                             <div class="w-10 h-10 bg-gradient-to-br from-pink-500/20 to-pink-600/20 rounded-lg flex items-center justify-center border border-pink-500/40 shadow-lg shadow-pink-500/10">
                                 <svg class="w-5 h-5 text-pink-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path>
@@ -251,7 +251,7 @@
                         {% endif %}
 
                         {% if post.comments %}
-                        <div class="flex items-center space-x-2.5">
+                        <div class="flex items-center space-x-2.5 lg:justify-center lg:py-3 lg:px-4 lg:rounded-xl lg:bg-slate-800/30 lg:border lg:border-blue-500/20">
                             <div class="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-lg flex items-center justify-center border border-blue-500/40 shadow-lg shadow-blue-500/10">
                                 <svg class="w-5 h-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
                                     <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd"></path>
@@ -309,7 +309,7 @@
                             <div id="performance-views-date" class="text-white font-semibold text-lg">—</div>
                         </div>
                         <div>
-                            <div class="text-slate-500">Delta</div>
+                            <div class="text-slate-500">Daily Increase</div>
                             <div id="performance-views-diff" class="text-white font-semibold text-lg">—</div>
                         </div>
                         <div>
@@ -339,7 +339,7 @@
                             <div id="performance-actions-date" class="text-white font-semibold text-lg">—</div>
                         </div>
                         <div>
-                            <div class="text-slate-500">Delta</div>
+                            <div class="text-slate-500">Daily Increase</div>
                             <div id="performance-actions-diff" class="text-white font-semibold text-lg">—</div>
                         </div>
                         <div>
@@ -492,6 +492,7 @@ function renderPerformanceChart({
     if (totalEl) {
         totalEl.textContent = latest ? Intl.NumberFormat().format(latest.total) : '—';
     }
+}
 });
 </script>
 {% endblock %}

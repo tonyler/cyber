@@ -52,3 +52,15 @@ node_modules/
 # Data/artifacts
 *.sqlite
 *.db
+
+# Separate repos (cloned locally)
+register/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Temporary files
+*.tmp
+*.temp
