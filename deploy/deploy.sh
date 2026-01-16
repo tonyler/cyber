@@ -36,8 +36,10 @@ else
 fi
 
 # Install dependencies and setup on server
-echo "[3/4] Installing dependencies on server..."
-ssh "$SERVER" "cd $REMOTE_DIR && pip3 install -r requirements.txt --quiet"
+echo "[3/4] Setting up venv and installing dependencies..."
+ssh "$SERVER" "cd $REMOTE_DIR && \
+    python3 -m venv venv && \
+    ./venv/bin/pip install -r requirements.txt --quiet"
 
 # Copy and enable systemd service
 echo "[4/4] Setting up systemd service..."

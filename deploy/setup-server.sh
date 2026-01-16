@@ -9,7 +9,7 @@ echo "=== Cybernetics Dashboard - Server Setup ==="
 # Install required packages
 echo "[1/5] Installing system packages..."
 apt update
-apt install -y python3 python3-pip nginx certbot python3-certbot-nginx
+apt install -y python3 python3-pip python3-venv python3-full nginx certbot python3-certbot-nginx
 
 # Create project directory
 echo "[2/5] Creating project directory..."

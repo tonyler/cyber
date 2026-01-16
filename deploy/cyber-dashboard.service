@@ -7,7 +7,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/cyber-dashboard
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /opt/cyber-dashboard/dashboard3/app.py
+ExecStart=/opt/cyber-dashboard/venv/bin/python /opt/cyber-dashboard/dashboard3/app.py
 Restart=always
 RestartSec=5
 
