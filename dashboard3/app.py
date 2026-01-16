@@ -18,7 +18,12 @@ class ReverseProxied:
         self.app = app
 
     def __call__(self, environ, start_response):
-        script_name = environ.get("HTTP_X_SCRIPT_NAME", "")
+        # Check both X-Script-Name and X-Forwarded-Prefix headers
+        script_name = (
+            environ.get("HTTP_X_SCRIPT_NAME")
+            or environ.get("HTTP_X_FORWARDED_PREFIX")
+            or ""
+        )
         if script_name:
             environ["SCRIPT_NAME"] = script_name
             path_info = environ.get("PATH_INFO", "")
