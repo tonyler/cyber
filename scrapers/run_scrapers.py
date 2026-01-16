@@ -6,9 +6,9 @@ from pathlib import Path
 
 project_root = Path(__file__).parent.parent
 scrapers_dir = project_root / "scrapers"
-dashboard_dir = project_root / "dashboard"
+shared_dir = project_root / "shared"
 sys.path.insert(0, str(scrapers_dir))
-sys.path.insert(0, str(dashboard_dir))
+sys.path.insert(0, str(shared_dir))
 
 from logger_config import setup_logger
 from x_scraper import XScraper
@@ -19,8 +19,8 @@ logger = setup_logger(__name__)
 MEMBERS_DB_PATH = str(project_root / "database" / "members.csv")
 LINKS_DB_PATH = str(project_root / "database" / "links.csv")
 CREDENTIALS_FILE = str(project_root / "shared" / "credentials" / "google.json")
-SYNC_CONFIG_FILE = project_root / "dashboard" / "sync_config.json"
-ENV_FILE = project_root / "dashboard" / ".env"
+SYNC_CONFIG_FILE = project_root / "shared" / "config" / "sync_config.json"
+ENV_FILE = project_root / ".env"
 
 
 def load_dashboard_env() -> dict:

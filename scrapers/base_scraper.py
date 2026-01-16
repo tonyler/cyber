@@ -9,8 +9,8 @@ from playwright.sync_api import sync_playwright, Browser, Page, BrowserContext
 from playwright_stealth import stealth
 
 project_root = Path(__file__).parent.parent
-dashboard_dir = project_root / "dashboard"
-sys.path.insert(0, str(dashboard_dir))
+shared_dir = project_root / "shared"
+sys.path.insert(0, str(shared_dir))
 
 from logger_config import setup_logger
 from members_service import MembersDBService

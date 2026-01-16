@@ -1,0 +1,19 @@
+{
+  "sync": {
+    "month_tab_format": "MM/YY"
+  },
+  "sheet_template": {
+    "x_columns": {
+      "url": "C",
+      "impressions": "D",
+      "likes": "E",
+      "comments": "F"
+    },
+    "reddit_columns": {
+      "url": "C",
+      "views": "D",
+      "upvotes": "E",
+      "comments": "F"
+    }
+  }
+}

@@ -3,7 +3,7 @@
 Create daily snapshots of the current month total views and record each day's increment.
 
 This script:
-1. Loads the canonical task CSV under `database/coordinated_tasks.csv`.
+1. Loads the canonical links CSV under `database/links.csv`.
 2. Sums all `impressions` for the current year-month.
 3. Stores or updates a monthly CSV (`database/monthly_views/YYYY-MM-views.csv`)
    with columns: date, total_views, difference.
@@ -27,7 +27,7 @@ from config import DATABASE_DIR, load_env
 
 load_env()
 
-TASKS_FILE = DATABASE_DIR / "coordinated_tasks.csv"
+TASKS_FILE = DATABASE_DIR / "links.csv"
 VIEWS_DIR = DATABASE_DIR / "monthly_views"
 VIEWS_DIR.mkdir(parents=True, exist_ok=True)
 LOG = logging.getLogger("monthly-views")

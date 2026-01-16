@@ -490,6 +490,58 @@ class XScraper(BaseScraper):
 
         return reposts
 
+    def _find_target_article(self, tweet_url: str):
+        """Find the article element matching the target tweet URL.
+
+        When viewing a reply/comment, X shows the parent tweet first,
+        then the reply. We need to find the article that matches our target URL.
+        """
+        # Extract tweet ID from URL
+        match = re.search(r'/status/(\d+)', tweet_url)
+        if not match:
+            logger.warning(f"Could not extract tweet ID from URL: {tweet_url}")
+            return self.page.locator('article').first
+
+        target_tweet_id = match.group(1)
+        logger.debug(f"Looking for article with tweet ID: {target_tweet_id}")
+
+        # Find all articles on the page
+        articles = self.page.locator('article').all()
+        logger.debug(f"Found {len(articles)} articles on page")
+
+        for article in articles:
+            try:
+                # Look for a time element with a link to this specific tweet
+                time_links = article.locator('time').locator('xpath=..').all()
+                for time_link in time_links:
+                    href = time_link.get_attribute('href') or ''
+                    if f'/status/{target_tweet_id}' in href:
+                        logger.debug(f"Found matching article for tweet {target_tweet_id}")
+                        return article
+            except Exception as e:
+                logger.debug(f"Error checking article: {e}")
+                continue
+
+        # Fallback: if this is a reply page, the target tweet is often the 2nd article
+        # (1st is parent, 2nd is the reply we're viewing)
+        if len(articles) >= 2:
+            logger.debug("Target article not found by ID; checking if this is a reply (using 2nd article)")
+            # Verify the 2nd article is actually our target by checking its structure
+            second_article = articles[1]
+            try:
+                time_links = second_article.locator('time').locator('xpath=..').all()
+                for time_link in time_links:
+                    href = time_link.get_attribute('href') or ''
+                    if f'/status/{target_tweet_id}' in href:
+                        logger.debug(f"Confirmed 2nd article is our target tweet {target_tweet_id}")
+                        return second_article
+            except Exception:
+                pass
+
+        # Final fallback: use first article
+        logger.debug("Using first article as fallback")
+        return self.page.locator('article').first
+
     def _extract_x_metrics(self, tweet_url: str) -> Dict[str, int]:
         """Extract metrics (views, likes, comments) from tweet"""
         metrics = {
@@ -505,8 +557,8 @@ class XScraper(BaseScraper):
             self._safe_get(tweet_url)
             time.sleep(3)
 
-            # Find the main tweet article (should be the first one)
-            tweet_article = self.page.locator('article').first
+            # Find the article matching our target tweet (handles replies correctly)
+            tweet_article = self._find_target_article(tweet_url)
             if tweet_article.count() == 0:
                 logger.warning(f"No tweet article found on {tweet_url}")
                 return metrics
@@ -633,13 +685,13 @@ class XScraper(BaseScraper):
         return metrics
 
     def _update_task_content_csv(self, target_url: str, content: str):
-        """Save tweet content into coordinated_tasks.csv (content column)."""
+        """Save tweet content into links.csv (content column)."""
         if not target_url or not content:
             return
 
-        csv_path = Path(__file__).parent.parent / "database" / "coordinated_tasks.csv"
+        csv_path = Path(__file__).parent.parent / "database" / "links.csv"
         if not csv_path.exists():
-            logger.warning(f"coordinated_tasks.csv not found at {csv_path}")
+            logger.warning(f"links.csv not found at {csv_path}")
             return
 
         try:
@@ -648,7 +700,7 @@ class XScraper(BaseScraper):
                 fieldnames = reader.fieldnames or []
                 rows = list(reader)
         except Exception as e:
-            logger.warning(f"Failed to read coordinated_tasks.csv: {e}")
+            logger.warning(f"Failed to read links.csv: {e}")
             return
 
         if 'content' not in fieldnames:
@@ -657,7 +709,8 @@ class XScraper(BaseScraper):
         normalized_target = self._normalize_x_url(target_url)
         updated = False
         for row in rows:
-            row_url = self._normalize_x_url(row.get('target_url', ''))
+            # Check both 'url' (new schema) and 'target_url' (old schema)
+            row_url = self._normalize_x_url(row.get('url') or row.get('target_url', ''))
             if row_url and row_url == normalized_target:
                 if not row.get('content'):
                     row['content'] = content[:2000]
@@ -676,7 +729,7 @@ class XScraper(BaseScraper):
             tmp_path.replace(csv_path)
             logger.info(f"✅ Saved tweet content for {normalized_target}")
         except Exception as e:
-            logger.warning(f"Failed to write coordinated_tasks.csv: {e}")
+            logger.warning(f"Failed to write links.csv: {e}")
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
 

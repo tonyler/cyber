@@ -95,11 +95,6 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             window.location.href = '/members';
         }
-        // Alt + T for Tasks
-        if (e.altKey && e.key === 't') {
-            e.preventDefault();
-            window.location.href = '/tasks';
-        }
         // Alt + A for Activity
         if (e.altKey && e.key === 'a') {
             e.preventDefault();

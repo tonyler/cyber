@@ -14,7 +14,6 @@ import sys
 _app_dir = Path(__file__).resolve().parent
 _project_root = _app_dir.parent
 sys.path.insert(0, str(_project_root / "shared"))
-sys.path.insert(0, str(_project_root / "dashboard"))
 
 from config import PROJECT_ROOT, DATABASE_DIR, flask_secret_key, load_env
 from logger_config import setup_logger
@@ -231,27 +230,6 @@ def members():
     except Exception as e:
         logger.error(f"Error loading members: {e}")
         return render_template('members.html', members=[])
-
-
-@app.route('/tasks')
-def tasks():
-    """Tasks page"""
-    try:
-        month = request.args.get('month', datetime.now().strftime('%Y-%m'))
-        all_tasks = members_service.get_tasks_for_month(month) if members_service else []
-        for task in all_tasks:
-            task["display_title"] = (
-                task.get("title")
-                or task.get("content")
-                or task.get("description")
-                or task.get("target_url")
-                or task.get("task_id")
-                or "Untitled Task"
-            )
-        return render_template('tasks.html', tasks=all_tasks, month=month)
-    except Exception as e:
-        logger.error(f"Error loading tasks: {e}")
-        return render_template('tasks.html', tasks=[], month=datetime.now().strftime('%Y-%m'))
 
 
 @app.route('/activity')

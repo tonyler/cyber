@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Sync Worker - Periodically syncs data from Google Sheets to local database
+Sync Worker - Simple one-way syncs:
+- Members: Google Sheets → local CSV (members register via sheets/bot)
+- Links/Posts: local CSV → Google Sheets (scraper is source of truth)
+- Activities: local CSV → Google Sheets (scraper writes activities)
 """
 
 import sys
@@ -9,16 +12,14 @@ import json
 import csv
 from collections import defaultdict
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add paths
 project_root = Path(__file__).resolve().parent.parent
-dashboard_dir = project_root / "dashboard"
-sys.path.insert(0, str(project_root / "shared"))
-sys.path.insert(0, str(dashboard_dir))
+shared_dir = project_root / "shared"
+sys.path.insert(0, str(shared_dir))
 
 from config import (
-    PROJECT_ROOT,
     CREDENTIALS_FILE,
     members_sheet_id as get_members_sheet_id,
     tasks_sheet_id as get_tasks_sheet_id,
@@ -32,321 +33,333 @@ load_env()
 logger = setup_logger(__name__)
 
 # Load config
-config_file = dashboard_dir / "sync_config.json"
+config_file = shared_dir / "config" / "sync_config.json"
 try:
     with open(config_file) as f:
         config = json.load(f)
     sync_config = config.get('sync', {})
     interval_minutes = sync_config.get('interval_minutes', 30)
     enabled = sync_config.get('enabled', True)
+    month_tab_format = sync_config.get('month_tab_format', 'MM/YY')
 except Exception as e:
     logger.warning(f"Could not load sync config: {e}, using defaults")
     interval_minutes = 30
     enabled = True
+    month_tab_format = 'MM/YY'
 
-def _fetch_sheet(spreadsheet, sheet_name: str, range_name: str = None):
-    try:
-        worksheet = spreadsheet.worksheet(sheet_name)
-    except Exception as e:
-        logger.warning(f"Sheet '{sheet_name}' not found: {e}")
-        return []
 
-    try:
-        return worksheet.get(range_name) if range_name else worksheet.get_all_values()
-    except Exception as e:
-        logger.error(f"Failed to fetch data from '{sheet_name}': {e}")
-        return []
-
-def _current_month_tab(format_str: str) -> str:
-    now = datetime.utcnow()
-    if format_str == "MM/YY":
-        return now.strftime("%m/%y")
-    if format_str == "MM/YYYY":
+def _current_month_tab() -> str:
+    now = datetime.now(timezone.utc)
+    if month_tab_format == "MM/YYYY":
         return now.strftime("%m/%Y")
     return now.strftime("%m/%y")
 
-def _month_tab_to_year_month(month_tab: str) -> str:
-    try:
-        if "/" in month_tab:
-            month, year = month_tab.split("/", 1)
-            if len(year) == 2:
-                year = f"20{year}"
-            return f"{year}-{month.zfill(2)}"
-    except Exception:
-        pass
-    return datetime.utcnow().strftime("%Y-%m")
 
-def _month_tab_from_date(date_str: str, format_str: str) -> str:
-    if date_str:
-        for fmt in ("%Y-%m-%d", "%d/%m/%y", "%d/%m/%Y", "%m/%d/%Y"):
-            try:
-                dt = datetime.strptime(date_str.strip(), fmt)
-                if format_str == "MM/YYYY":
-                    return dt.strftime("%m/%Y")
-                return dt.strftime("%m/%y")
-            except ValueError:
-                continue
-    return _current_month_tab(format_str)
+def _current_year_month() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m")
 
-def _load_x_activity_csv(csv_path: Path) -> list[dict]:
-    if not csv_path.exists():
-        logger.warning(f"X activity CSV not found at {csv_path}")
+
+def _read_csv(path: Path) -> list[dict]:
+    if not path.exists():
         return []
-    rows = []
     try:
-        with csv_path.open("r", newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row:
-                    rows.append(row)
+        with path.open('r', newline='', encoding='utf-8') as f:
+            return list(csv.DictReader(f))
     except Exception as e:
-        logger.error(f"Failed to read X activity CSV: {e}")
+        logger.error(f"Failed to read {path}: {e}")
         return []
-    return rows
 
-def _ensure_activity_month_tab(spreadsheet, tab_name: str):
+
+def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]):
     try:
-        return spreadsheet.worksheet(tab_name)
-    except Exception:
-        worksheet = spreadsheet.add_worksheet(title=tab_name, rows=2000, cols=23)
-        x_headers = [
-            "date",
-            "time",
-            "discord_user",
-            "x_handle",
-            "activity_type",
-            "activity_url",
-            "target_url",
-            "task_id",
-            "notes",
-        ]
-        reddit_headers = [
-            "date",
-            "time",
-            "discord_user",
-            "reddit_username",
-            "activity_type",
-            "activity_url",
-            "target_url",
-            "task_id",
-            "upvotes",
-            "comments",
-            "notes",
-        ]
-        worksheet.update("A1:I1", [x_headers])
-        worksheet.update("M1:W1", [reddit_headers])
-        return worksheet
+        with path.open('w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            writer.writeheader()
+            writer.writerows(rows)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to write {path}: {e}")
+        return False
 
-def _sync_x_activity_csv_to_sheet(activity_spreadsheet, month_tab_format: str, csv_path: Path) -> int:
-    rows = _load_x_activity_csv(csv_path)
+
+# ============================================================
+# MEMBERS: Local → Sheets
+# ============================================================
+
+def sync_members_to_sheets(gc, members_sheet_id: str) -> int:
+    """Upload members.csv to Google Sheets - exact CSV mirror."""
+    csv_path = project_root / "database" / "members.csv"
+    rows = _read_csv(csv_path)
+
+    if not rows:
+        logger.info("No members to sync")
+        return 0
+
+    # CSV headers - exact match
+    headers = ['discord_user', 'x_handle', 'reddit_username', 'status',
+               'joined_date', 'last_activity', 'total_points', 'last_active',
+               'total_tasks', 'x_profile_url', 'reddit_profile_url', 'registration_date']
+
+    try:
+        spreadsheet = gc.open_by_key(members_sheet_id)
+
+        # Get or create worksheet
+        try:
+            worksheet = spreadsheet.worksheet("Member Registry")
+        except Exception:
+            worksheet = spreadsheet.add_worksheet(title="Member Registry", rows=500, cols=len(headers))
+
+        # Clear and rewrite with exact CSV format
+        worksheet.clear()
+        worksheet.update(values=[headers], range_name='A1')
+
+        # Prepare all rows matching CSV exactly
+        sheet_rows = []
+        for r in rows:
+            sheet_rows.append([
+                r.get('discord_user', ''),
+                r.get('x_handle', ''),
+                r.get('reddit_username', ''),
+                r.get('status', ''),
+                r.get('joined_date', ''),
+                r.get('last_activity', ''),
+                r.get('total_points', ''),
+                r.get('last_active', ''),
+                r.get('total_tasks', ''),
+                r.get('x_profile_url', ''),
+                r.get('reddit_profile_url', ''),
+                r.get('registration_date', ''),
+            ])
+
+        if sheet_rows:
+            worksheet.update(values=sheet_rows, range_name=f'A2:L{len(sheet_rows)+1}', value_input_option='RAW')
+            logger.info(f"Synced {len(sheet_rows)} members to Member Registry (full refresh)")
+
+        return len(sheet_rows)
+
+    except Exception as e:
+        logger.error(f"Failed to sync members to sheets: {e}")
+        return 0
+
+
+# ============================================================
+# LINKS: Local → Sheets
+# ============================================================
+
+def sync_links_to_sheets(gc, tasks_sheet_id: str) -> int:
+    """Upload links.csv to Google Sheets - exact CSV mirror."""
+    csv_path = project_root / "database" / "links.csv"
+    rows = _read_csv(csv_path)
+
+    if not rows:
+        logger.info("No links to sync")
+        return 0
+
+    # Filter to current month
+    year_month = _current_year_month()
+    month_rows = [r for r in rows if r.get('year_month') == year_month]
+
+    if not month_rows:
+        logger.info(f"No links for {year_month}")
+        return 0
+
+    # CSV headers - exact match
+    headers = ['id', 'platform', 'url', 'author', 'year_month', 'date',
+               'impressions', 'likes', 'comments', 'retweets', 'content', 'title', 'synced_at']
+
+    try:
+        spreadsheet = gc.open_by_key(tasks_sheet_id)
+        tab_name = _current_month_tab()
+
+        # Get or create worksheet
+        try:
+            worksheet = spreadsheet.worksheet(tab_name)
+        except Exception:
+            worksheet = spreadsheet.add_worksheet(title=tab_name, rows=500, cols=len(headers))
+
+        # Clear and rewrite with exact CSV format
+        worksheet.clear()
+        worksheet.update(values=[headers], range_name='A1')
+
+        # Prepare all rows matching CSV exactly
+        sheet_rows = []
+        for r in month_rows:
+            sheet_rows.append([
+                r.get('id', ''),
+                r.get('platform', ''),
+                r.get('url', ''),
+                r.get('author', ''),
+                r.get('year_month', ''),
+                r.get('date', ''),
+                r.get('impressions', ''),
+                r.get('likes', ''),
+                r.get('comments', ''),
+                r.get('retweets', ''),
+                (r.get('content', '') or '')[:1000],  # Truncate for sheets
+                r.get('title', ''),
+                r.get('synced_at', ''),
+            ])
+
+        if sheet_rows:
+            worksheet.update(values=sheet_rows, range_name=f'A2:M{len(sheet_rows)+1}', value_input_option='RAW')
+            logger.info(f"Synced {len(sheet_rows)} links to {tab_name} (full refresh)")
+
+        return len(sheet_rows)
+
+    except Exception as e:
+        logger.error(f"Failed to sync links to sheets: {e}")
+        return 0
+
+
+# ============================================================
+# ACTIVITIES: Local → Sheets
+# ============================================================
+
+def sync_activities_to_sheets(gc, activity_sheet_id: str) -> int:
+    """Upload x_activity_log.csv to Google Sheets - exact CSV mirror."""
+    csv_path = project_root / "database" / "x_activity_log.csv"
+    rows = _read_csv(csv_path)
+
     if not rows:
         return 0
 
-    rows_by_tab: dict[str, list[dict]] = defaultdict(list)
-    for row in rows:
-        tab = _month_tab_from_date(row.get("date", ""), month_tab_format)
-        rows_by_tab[tab].append(row)
+    # CSV headers - exact match
+    headers = ['date', 'time', 'discord_user', 'x_handle', 'activity_type',
+               'activity_url', 'target_url', 'task_id', 'notes']
 
-    total_inserted = 0
-    for tab_name, tab_rows in rows_by_tab.items():
-        worksheet = _ensure_activity_month_tab(activity_spreadsheet, tab_name)
+    # Group by month
+    rows_by_month = defaultdict(list)
+    for r in rows:
+        date_str = r.get('date', '')
+        if date_str and len(date_str) >= 7:
+            ym = date_str[:7]  # YYYY-MM
+            try:
+                dt = datetime.strptime(ym, "%Y-%m")
+                if month_tab_format == "MM/YYYY":
+                    tab = dt.strftime("%m/%Y")
+                else:
+                    tab = dt.strftime("%m/%y")
+                rows_by_month[tab].append(r)
+            except Exception:
+                pass
 
+    if not rows_by_month:
+        return 0
+
+    try:
+        spreadsheet = gc.open_by_key(activity_sheet_id)
+    except Exception as e:
+        logger.error(f"Failed to open activity sheet: {e}")
+        return 0
+
+    total_synced = 0
+
+    for tab_name, tab_rows in rows_by_month.items():
         try:
-            existing_urls = set()
-            url_col = worksheet.col_values(6)
-            for url in url_col[1:]:
-                url = url.strip() if url else ""
-                if url:
-                    existing_urls.add(url)
+            # Get or create worksheet
+            try:
+                worksheet = spreadsheet.worksheet(tab_name)
+            except Exception:
+                worksheet = spreadsheet.add_worksheet(title=tab_name, rows=2000, cols=len(headers))
+
+            # Clear and rewrite with exact CSV format
+            worksheet.clear()
+            worksheet.update(values=[headers], range_name='A1')
+
+            # Prepare all rows matching CSV exactly
+            sheet_rows = []
+            for r in tab_rows:
+                sheet_rows.append([
+                    r.get('date', ''),
+                    r.get('time', ''),
+                    r.get('discord_user', ''),
+                    r.get('x_handle', ''),
+                    r.get('activity_type', ''),
+                    r.get('activity_url', ''),
+                    r.get('target_url', ''),
+                    r.get('task_id', ''),
+                    r.get('notes', ''),
+                ])
+
+            if sheet_rows:
+                # Batch update
+                for start in range(0, len(sheet_rows), 500):
+                    batch = sheet_rows[start:start + 500]
+                    end_row = start + len(batch) + 1
+                    worksheet.update(values=batch, range_name=f'A{start+2}:I{end_row}', value_input_option='RAW')
+                logger.info(f"Synced {len(sheet_rows)} activities to {tab_name} (full refresh)")
+                total_synced += len(sheet_rows)
+
         except Exception as e:
-            logger.warning(f"Failed to read existing URLs from {tab_name}: {e}")
-            existing_urls = set()
+            logger.warning(f"Failed to sync activities to {tab_name}: {e}")
 
-        new_rows = []
-        for row in tab_rows:
-            activity_url = (row.get("activity_url") or "").strip()
-            if not activity_url or activity_url in existing_urls:
-                continue
-            new_rows.append([
-                row.get("date", ""),
-                row.get("time", ""),
-                row.get("discord_user", ""),
-                row.get("x_handle", ""),
-                row.get("activity_type", ""),
-                activity_url,
-                row.get("target_url", ""),
-                row.get("task_id", ""),
-                row.get("notes", ""),
-            ])
+    return total_synced
 
-        if not new_rows:
-            continue
 
-        for start in range(0, len(new_rows), 500):
-            batch = new_rows[start:start + 500]
-            worksheet.append_rows(batch, value_input_option="RAW")
-            total_inserted += len(batch)
-        logger.info("Synced %s new X activities to %s", len(new_rows), tab_name)
-
-    return total_inserted
-
+# ============================================================
+# MAIN SYNC
+# ============================================================
 
 def run_sync():
-    """Run one sync cycle"""
-    try:
-        logger.info("=" * 60)
-        logger.info(f"Starting sync cycle at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        logger.info("=" * 60)
-
-        members_sheet_id = get_members_sheet_id()
-        tasks_sheet_id = get_tasks_sheet_id()
-        activity_sheet_id = get_activity_sheet_id()
-
-        if not members_sheet_id or not tasks_sheet_id or not activity_sheet_id:
-            logger.error("Missing sheet IDs in .env; sync cannot proceed")
-            return
-
-        credentials_file = CREDENTIALS_FILE
-        if not credentials_file.exists():
-            logger.error(f"Google credentials not found at {credentials_file}")
-            return
-
-        try:
-            import gspread
-        except Exception as e:
-            logger.error(f"Missing gspread dependency: {e}")
-            return
-
-        from members_sheets_parser import MembersSheetsParser
-        from members_service import MembersDBService
-
-        config_file = dashboard_dir / "sync_config.json"
-        month_tab_format = "MM/YY"
-        if config_file.exists():
-            try:
-                config = json.loads(config_file.read_text())
-                month_tab_format = config.get("sync", {}).get("month_tab_format", month_tab_format)
-            except Exception as e:
-                logger.warning(f"Could not load month tab format: {e}")
-
-        month_tab = _current_month_tab(month_tab_format)
-
-        gc = gspread.service_account(filename=str(credentials_file))
-        members_spreadsheet = gc.open_by_key(members_sheet_id)
-        tasks_spreadsheet = gc.open_by_key(tasks_sheet_id)
-        activity_spreadsheet = gc.open_by_key(activity_sheet_id)
-
-        csv_activity_path = project_root / "database" / "x_activity_log.csv"
-        csv_synced = _sync_x_activity_csv_to_sheet(
-            activity_spreadsheet,
-            month_tab_format,
-            csv_activity_path,
-        )
-        if csv_synced:
-            logger.info("Synced %s CSV X activities to activity sheet", csv_synced)
-
-        parser = MembersSheetsParser()
-        members_db = MembersDBService(str(project_root / "database" / "members.csv"))
-        year_month = _month_tab_to_year_month(month_tab)
-
-        members_rows = _fetch_sheet(members_spreadsheet, "Member Registry")
-        members = parser.parse_members_registry(members_rows)
-        members_synced = 0
-        for member in members:
-            if members_db.upsert_member(member):
-                members_synced += 1
-
-        tasks_rows = _fetch_sheet(tasks_spreadsheet, month_tab)
-        tasks = parser.parse_monthly_content_tasks(tasks_rows, year_month)
-        existing_tasks = {task.get("task_id"): task for task in members_db.get_tasks_for_month(year_month)}
-        removed = members_db.delete_tasks_for_month(year_month)
-        if removed:
-            logger.info(f"Cleared {removed} tasks for {year_month} before sync")
-        tasks_synced = 0
-        for task in tasks:
-            task_data = {
-                'task_id': task.get('task_id'),
-                'platform': task.get('platform'),
-                'task_type': task.get('task_type'),
-                'target_url': task.get('target_url'),
-                'description': task.get('description'),
-                'content': task.get('content'),
-                'title': task.get('title'),
-                'impressions': task.get('impressions', 0),
-                'likes': task.get('likes', 0),
-                'comments': task.get('comments', 0),
-                'is_active': task.get('is_active', 1),
-                'created_date': task.get('created_date'),
-                'created_by': task.get('created_by'),
-                'year_month': task.get('year_month'),
-            }
-            existing = existing_tasks.get(task_data.get("task_id"))
-            if existing:
-                if not task_data.get("content"):
-                    task_data["content"] = existing.get("content")
-                if not task_data.get("title"):
-                    task_data["title"] = existing.get("title")
-            if members_db.upsert_task(task_data):
-                tasks_synced += 1
-
-        try:
-            from generate_titles import generate_missing_titles
-            titles_csv = project_root / "database" / "coordinated_tasks.csv"
-            titles_updated = generate_missing_titles(titles_csv)
-            if titles_updated:
-                logger.info("Generated %s missing titles", titles_updated)
-        except Exception as e:
-            logger.warning(f"Title generation skipped: {e}")
-
-        x_rows = _fetch_sheet(activity_spreadsheet, month_tab, "A:I")
-        x_activities = parser.parse_x_activity_log(x_rows)
-        x_inserted = members_db.insert_x_activities_batch(x_activities)
-
-        reddit_rows = _fetch_sheet(activity_spreadsheet, month_tab, "M:W")
-        reddit_activities = parser.parse_reddit_activity_log(reddit_rows)
-        reddit_inserted = members_db.insert_reddit_activities_batch(reddit_activities)
-
-        logger.info(
-            "Sync results: members=%s, tasks=%s, x_activities=%s, reddit_activities=%s",
-            members_synced,
-            tasks_synced,
-            x_inserted,
-            reddit_inserted,
-        )
-        logger.info("✅ Sync cycle completed successfully")
-
-    except Exception as e:
-        logger.error(f"❌ Sync cycle failed: {e}", exc_info=True)
-
-def main():
-    """Main sync worker loop"""
+    """Run one sync cycle."""
     logger.info("=" * 60)
-    logger.info("Cybernetics Sync Worker Starting")
+    logger.info(f"Starting sync at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
-    logger.info(f"Sync interval: {interval_minutes} minutes")
-    logger.info(f"Sync enabled: {enabled}")
 
-    if not enabled:
-        logger.warning("Sync is disabled in config, worker will exit")
+    members_sheet_id = get_members_sheet_id()
+    tasks_sheet_id = get_tasks_sheet_id()
+    activity_sheet_id = get_activity_sheet_id()
+
+    if not all([members_sheet_id, tasks_sheet_id, activity_sheet_id]):
+        logger.error("Missing sheet IDs in .env")
         return
 
-    interval_seconds = interval_minutes * 60
+    if not CREDENTIALS_FILE.exists():
+        logger.error(f"Google credentials not found: {CREDENTIALS_FILE}")
+        return
+
+    try:
+        import gspread
+        gc = gspread.service_account(filename=str(CREDENTIALS_FILE))
+    except Exception as e:
+        logger.error(f"Failed to authenticate with Google: {e}")
+        return
+
+    # 1. Members: Local → Sheets
+    members_synced = sync_members_to_sheets(gc, members_sheet_id)
+
+    # 2. Links: Local → Sheets
+    links_synced = sync_links_to_sheets(gc, tasks_sheet_id)
+
+    # 3. Activities: Local → Sheets
+    activities_synced = sync_activities_to_sheets(gc, activity_sheet_id)
+
+    logger.info(f"Sync results: members={members_synced}, links={links_synced}, activities={activities_synced}")
+    logger.info("✅ Sync completed")
+
+
+def main():
+    logger.info("=" * 60)
+    logger.info("Cybernetics Sync Worker (Minimal)")
+    logger.info("=" * 60)
+    logger.info(f"Interval: {interval_minutes} minutes")
+
+    if not enabled:
+        logger.warning("Sync disabled in config")
+        return
 
     logger.info("Running initial sync...")
     run_sync()
 
-    logger.info(f"Entering sync loop (every {interval_minutes} minutes)...")
+    logger.info(f"Entering sync loop (every {interval_minutes} min)...")
 
     try:
         while True:
-            time.sleep(interval_seconds)
+            time.sleep(interval_minutes * 60)
             run_sync()
-
     except KeyboardInterrupt:
-        logger.info("Sync worker interrupted, shutting down gracefully...")
-    except Exception as e:
-        logger.error(f"Sync worker crashed: {e}", exc_info=True)
-        raise
+        logger.info("Shutting down...")
+
 
 if __name__ == '__main__':
     main()

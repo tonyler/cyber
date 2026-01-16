@@ -93,13 +93,6 @@
                         </svg>
                         Members
                     </a>
-                    <a href="{{ url_for('tasks') }}"
-                       class="nav-link {% if request.endpoint == 'tasks' %}active{% endif %}">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
-                        </svg>
-                        Tasks
-                    </a>
                     <a href="{{ url_for('activity') }}"
                        class="nav-link {% if request.endpoint == 'activity' %}active{% endif %}">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -123,7 +116,6 @@
             <div class="px-2 pt-2 pb-3 space-y-1">
                 <a href="{{ url_for('index') }}" class="mobile-nav-link">Dashboard</a>
                 <a href="{{ url_for('members') }}" class="mobile-nav-link">Members</a>
-                <a href="{{ url_for('tasks') }}" class="mobile-nav-link">Tasks</a>
                 <a href="{{ url_for('activity') }}" class="mobile-nav-link">Activity</a>
             </div>
         </div>

@@ -1,10 +1,11 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 import sys
+import csv
 import json
+import hashlib
+import re
 from pathlib import Path
 from datetime import datetime
 import logging
@@ -14,15 +15,20 @@ _bot_dir = Path(__file__).resolve().parent
 _project_root = _bot_dir.parent
 sys.path.insert(0, str(_project_root / "shared"))
 
-from config import BOT_CONFIG_FILE, CREDENTIALS_FILE, discord_token, load_env
+from config import BOT_CONFIG_FILE, discord_token, load_env
 
 load_env()
 
 logging.basicConfig(level=logging.INFO)
-logging.getLogger("discord").setLevel(logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 with open(BOT_CONFIG_FILE) as f:
     config = json.load(f)
+
+# Database paths
+DATABASE_DIR = _project_root / "database"
+LINKS_CSV = DATABASE_DIR / "links.csv"
+MEMBERS_CSV = DATABASE_DIR / "members.csv"
 
 PLATFORMS = {
     'X': ['twitter.com', 'x.com'],
@@ -31,19 +37,56 @@ PLATFORMS = {
 
 PLATFORM_EMOJIS = {'X': '🐦', 'Reddit': '🔴'}
 
-SCOPES = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
-CREDS = ServiceAccountCredentials.from_json_keyfile_name(str(CREDENTIALS_FILE), SCOPES)
-SHEETS_CLIENT = gspread.authorize(CREDS)
-
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+
+def _read_csv(path: Path) -> list[dict]:
+    """Read CSV file and return list of dicts."""
+    if not path.exists():
+        return []
+    try:
+        with path.open('r', newline='', encoding='utf-8') as f:
+            return list(csv.DictReader(f))
+    except Exception as e:
+        logger.error(f"Failed to read {path}: {e}")
+        return []
+
+
+def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> bool:
+    """Write rows to CSV file."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open('w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
+            writer.writeheader()
+            writer.writerows(rows)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to write {path}: {e}")
+        return False
+
+
+def _normalize_url(url: str) -> str:
+    """Normalize X/Twitter URLs to standard format."""
+    if not url:
+        return url
+    match = re.search(r'/status(?:es)?/(\d+)', url)
+    if match:
+        return f"https://x.com/i/status/{match.group(1)}"
+    return url.strip()
+
+
+def _gen_id(url: str) -> str:
+    """Generate short ID from URL."""
+    return hashlib.sha1(url.encode()).hexdigest()[:12]
+
+
 class ContentBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.sheet_id = config['content_sheet_id']
-        self.channel_id = int(config['content_channel_id']) if config['content_channel_id'] != 'CHANNEL_ID_HERE' else None
+        self.channel_id = int(config['content_channel_id']) if config.get('content_channel_id', 'CHANNEL_ID_HERE') != 'CHANNEL_ID_HERE' else None
 
     def detect_platform(self, url):
         url_lower = url.lower()
@@ -52,52 +95,42 @@ class ContentBot(commands.Cog):
                 return platform
         return None
 
-    def get_or_create_monthly_tab(self, spreadsheet):
-        tab_name = datetime.now().strftime('%m/%y')
+    def save_link_to_csv(self, url: str, author: str, platform: str, notes: str = '') -> bool:
+        """Save a new link to links.csv."""
+        normalized_url = _normalize_url(url)
 
-        try:
-            return spreadsheet.worksheet(tab_name)
-        except gspread.exceptions.WorksheetNotFound:
-            worksheet = spreadsheet.add_worksheet(title=tab_name, rows=1000, cols=15)
+        # Read existing links
+        rows = _read_csv(LINKS_CSV)
 
-            headers = [
-                'Date', 'Author', 'URL', 'Impressions', 'Likes', 'Comments', 'Notes', 'Total Impressions',
-                'Date', 'Author', 'URL', 'Views', 'Upvotes', 'Comments', 'Notes', 'Total Impressions'
-            ]
+        # Check if URL already exists
+        for row in rows:
+            if row.get('url') == normalized_url:
+                logger.info(f"URL already exists: {normalized_url}")
+                return True  # Already exists, not an error
 
-            worksheet.update('A1:P1', [headers])
-
-            worksheet.format('A:P', {'textFormat': {'fontFamily': 'Lexend', 'fontSize': 12}})
-
-            worksheet.format('A1:H1', {
-                'backgroundColor': {'red': 0.53, 'green': 0.81, 'blue': 0.98},
-                'textFormat': {'bold': True, 'fontFamily': 'Lexend', 'fontSize': 12},
-                'horizontalAlignment': 'CENTER'
-            })
-
-            worksheet.format('I1:P1', {
-                'backgroundColor': {'red': 1.0, 'green': 0.55, 'blue': 0.27},
-                'textFormat': {'bold': True, 'fontFamily': 'Lexend', 'fontSize': 12},
-                'horizontalAlignment': 'CENTER'
-            })
-
-            return worksheet
-
-    def append_to_table(self, worksheet, platform, data):
-        col_config = {
-            'X': (1, 'A', 'H'),
-            'Reddit': (9, 'I', 'P')
+        # Add new link
+        year_month = datetime.now().strftime('%Y-%m')
+        new_row = {
+            'id': _gen_id(normalized_url),
+            'platform': platform.lower(),
+            'url': normalized_url,
+            'author': author,
+            'year_month': year_month,
+            'date': datetime.now().strftime('%Y-%m-%d'),
+            'impressions': '',
+            'likes': '',
+            'comments': '',
+            'retweets': '',
+            'content': notes if notes else '',
+            'title': '',
+            'synced_at': '',
         }
+        rows.append(new_row)
 
-        if platform not in col_config:
-            raise ValueError(f"Unknown platform: {platform}")
+        fieldnames = ['id', 'platform', 'url', 'author', 'year_month', 'date',
+                      'impressions', 'likes', 'comments', 'retweets', 'content', 'title', 'synced_at']
 
-        start_col, start_letter, end_letter = col_config[platform]
-        next_row = len(worksheet.col_values(start_col)) + 1
-
-        # Keep row width aligned with the A:P header structure (include total impressions col).
-        row_data = [data['date'], data['author'], data['url'], '', '', '', data['notes'], '']
-        worksheet.update(f'{start_letter}{next_row}:{end_letter}{next_row}', [row_data])
+        return _write_csv(LINKS_CSV, rows, fieldnames)
 
     @app_commands.command(name='submit', description='Submit content for a raid')
     @app_commands.describe(link='The URL of your X or Reddit post', notes='Optional notes about the content')
@@ -110,17 +143,12 @@ class ContentBot(commands.Cog):
         await interaction.response.defer()
 
         try:
-            spreadsheet = SHEETS_CLIENT.open_by_key(self.sheet_id)
-            worksheet = self.get_or_create_monthly_tab(spreadsheet)
+            author = interaction.user.name
+            success = self.save_link_to_csv(link, author, platform, notes)
 
-            data = {
-                'date': datetime.now().strftime('%d/%m/%y'),
-                'author': interaction.user.display_name,
-                'url': link,
-                'notes': notes
-            }
-
-            self.append_to_table(worksheet, platform, data)
+            if not success:
+                await interaction.followup.send("Failed to save, please try again.", ephemeral=True)
+                return
 
             embed = discord.Embed(title="🦾 ATTACK", color=0x2d2d2d)
             embed.add_field(name="Platform", value=f"{PLATFORM_EMOJIS.get(platform, '📱')} {platform}", inline=False)
@@ -133,15 +161,17 @@ class ContentBot(commands.Cog):
             message = await interaction.followup.send(content="@everyone", embed=embed)
             await message.add_reaction('✅')
 
+            logger.info(f"Link submitted by {author}: {link}")
+
         except Exception as e:
-            print(f"Error submitting content: {e}")
+            logger.error(f"Error submitting content: {e}")
             await interaction.followup.send("Failed to save, please try again.", ephemeral=True)
+
 
 class RegistrationBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.sheet_id = config['registration_sheet_id']
-        self.channel_id = int(config['registration_channel_id']) if config['registration_channel_id'] != 'CHANNEL_ID_HERE' else None
+        self.channel_id = int(config['registration_channel_id']) if config.get('registration_channel_id', 'CHANNEL_ID_HERE') != 'CHANNEL_ID_HERE' else None
 
     def normalize_x_handle(self, url):
         if not url:
@@ -153,29 +183,57 @@ class RegistrationBot(commands.Cog):
             handle = url
         return handle.lstrip('@').lower()
 
-    def normalize_x_profile_url(self, url):
-        handle = self.normalize_x_handle(url)
-        return f"https://x.com/{handle}" if handle else ''
-
     def normalize_reddit_username(self, url):
         if not url:
             return ''
-
         url = url.strip()
-
         if 'reddit.com/' in url and ('u/' in url or 'user/' in url):
             username = url.rstrip('/').split('/')[-1]
         else:
             username = url
-
         if username.startswith('u/'):
             username = username[2:]
-
         return username.lower()
 
-    def normalize_reddit_profile_url(self, url):
-        username = self.normalize_reddit_username(url)
-        return f"https://www.reddit.com/user/{username}" if username else ''
+    def save_member_to_csv(self, discord_user: str, x_handle: str, reddit_username: str) -> bool:
+        """Save or update member in members.csv."""
+        rows = _read_csv(MEMBERS_CSV)
+
+        # Find existing member
+        found = False
+        discord_lower = discord_user.lower()
+        for row in rows:
+            if row.get('discord_user', '').lower() == discord_lower:
+                # Update existing
+                row['x_handle'] = x_handle
+                row['reddit_username'] = reddit_username
+                row['last_active'] = datetime.now().strftime('%Y-%m-%d')
+                found = True
+                break
+
+        if not found:
+            # Add new member
+            new_row = {
+                'discord_user': discord_user,
+                'x_handle': x_handle,
+                'reddit_username': reddit_username,
+                'status': 'active',
+                'joined_date': datetime.now().strftime('%Y-%m-%d'),
+                'last_activity': '',
+                'total_points': '0',
+                'last_active': datetime.now().strftime('%Y-%m-%d'),
+                'total_tasks': '',
+                'x_profile_url': f'https://x.com/{x_handle}' if x_handle else '',
+                'reddit_profile_url': f'https://reddit.com/user/{reddit_username}' if reddit_username else '',
+                'registration_date': datetime.now().strftime('%Y-%m-%d'),
+            }
+            rows.append(new_row)
+
+        fieldnames = ['discord_user', 'x_handle', 'reddit_username', 'status',
+                      'joined_date', 'last_activity', 'total_points', 'last_active',
+                      'total_tasks', 'x_profile_url', 'reddit_profile_url', 'registration_date']
+
+        return _write_csv(MEMBERS_CSV, rows, fieldnames)
 
     @app_commands.command(name='register', description='Register your X and Reddit profiles')
     @app_commands.describe(x_profile='Your X (Twitter) profile URL', reddit_profile='Your Reddit profile URL')
@@ -191,47 +249,30 @@ class RegistrationBot(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            spreadsheet = SHEETS_CLIENT.open_by_key(self.sheet_id)
-            worksheet = spreadsheet.worksheet('Member Registry')
+            discord_user = interaction.user.name
+            x_handle = self.normalize_x_handle(x_profile)
+            reddit_username = self.normalize_reddit_username(reddit_profile)
 
-            discord_usernames = worksheet.col_values(1)
-            username = interaction.user.name
+            success = self.save_member_to_csv(discord_user, x_handle, reddit_username)
 
-            x_handle_normalized = self.normalize_x_handle(x_profile)
-            reddit_username_normalized = self.normalize_reddit_username(reddit_profile)
+            if not success:
+                await interaction.followup.send("❌ Failed to register. Please try again.", ephemeral=True)
+                return
 
-            update_data = [
-                username,
-                self.normalize_x_profile_url(x_profile),
-                self.normalize_reddit_profile_url(reddit_profile),
-                x_handle_normalized,
-                reddit_username_normalized,
-                'active',
-                datetime.now().strftime('%Y-%m-%d'),
-                '',
-                '0'
-            ]
-
-            if username in discord_usernames[1:]:
-                row_index = discord_usernames.index(username) + 1
-                worksheet.update(f'A{row_index}:I{row_index}', [update_data])
-                message = "✅ Your profile has been updated successfully!"
-            else:
-                next_row = len(discord_usernames) + 1
-                worksheet.update(f'A{next_row}:I{next_row}', [update_data])
-                message = "✅ You have been registered successfully!"
-
-            response_parts = [message, "\n**Registered profiles:**"]
+            response_parts = ["✅ You have been registered successfully!", "\n**Registered profiles:**"]
             if x_profile:
-                response_parts.append(f"🐦 X: @{self.normalize_x_handle(x_profile)}")
+                response_parts.append(f"🐦 X: @{x_handle}")
             if reddit_profile:
-                response_parts.append(f"🔴 Reddit: u/{self.normalize_reddit_username(reddit_profile)}")
+                response_parts.append(f"🔴 Reddit: u/{reddit_username}")
 
             await interaction.followup.send('\n'.join(response_parts), ephemeral=True)
 
+            logger.info(f"Member registered: {discord_user} (X: {x_handle}, Reddit: {reddit_username})")
+
         except Exception as e:
-            print(f"Error during registration: {e}")
+            logger.error(f"Error during registration: {e}")
             await interaction.followup.send("❌ Failed to register. Please try again.", ephemeral=True)
+
 
 @bot.event
 async def on_ready():
@@ -243,14 +284,17 @@ async def on_ready():
     except Exception as e:
         print(f'Failed to sync commands: {e}')
 
+
 async def setup():
     await bot.add_cog(ContentBot(bot))
     await bot.add_cog(RegistrationBot(bot))
+
 
 async def main():
     async with bot:
         await setup()
         await bot.start(discord_token())
+
 
 if __name__ == '__main__':
     import asyncio
