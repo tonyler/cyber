@@ -18,7 +18,10 @@
       "Bash(xargs ls:*)",
       "Bash(./stop.sh)",
       "Bash(./start.sh)",
-      "Bash(pwdx:*)"
+      "Bash(pwdx:*)",
+      "Bash(python test_single_post.py:*)",
+      "Bash(git stash:*)",
+      "Bash(ghsync pull:*)"
     ]
   }
 }

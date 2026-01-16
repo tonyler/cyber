@@ -566,7 +566,6 @@ class XScraper(BaseScraper):
                             # Match patterns like "1.2K Views", "Views 1.2K", or just numbers with K/M
                             if 'view' in text.lower():
                                 # Extract number before or after "views"
-                                import re
                                 match = re.search(r'([\d,.]+[KMB]?)\s*views?|views?\s*([\d,.]+[KMB]?)', text, re.IGNORECASE)
                                 if match:
                                     count_str = match.group(1) or match.group(2)
@@ -600,12 +599,31 @@ class XScraper(BaseScraper):
                 )
 
             # Extract main tweet content for local storage
+            # Check for X article first (long-form content)
             try:
-                text_element = tweet_article.locator('[data-testid="tweetText"]').first
-                if text_element.count() > 0:
-                    text = text_element.text_content()
-                    if text:
-                        metrics['content'] = text.strip()
+                article_view = tweet_article.locator('[data-testid="twitterArticleReadView"]').first
+
+                if article_view.count() > 0:
+                    # This is an X article - extract title only
+                    article_text = article_view.text_content() or ""
+                    # Title is at the start, before metrics numbers (e.g., "15822335110K")
+                    title_match = re.match(r'^(.+?)(?:\s*\d+[KMB]?\s*\d+[KMB]?\s*\d+[KMB]?\s*\d+[KMB]?|$)', article_text)
+                    if title_match:
+                        article_title = title_match.group(1).strip()
+                    else:
+                        # Fallback: take first 200 chars and cut at sentence end
+                        article_title = article_text[:200].rsplit('.', 1)[0] if '.' in article_text[:200] else article_text[:100]
+                    if article_title:
+                        metrics['content'] = f"[Article] {article_title}"
+                        metrics['is_article'] = True
+                        logger.info(f"Detected X article: {article_title[:60]}...")
+                else:
+                    # Regular tweet - extract full text
+                    text_element = tweet_article.locator('[data-testid="tweetText"]').first
+                    if text_element.count() > 0:
+                        text = text_element.text_content()
+                        if text:
+                            metrics['content'] = text.strip()
             except Exception as e:
                 logger.debug(f"Failed to extract tweet content: {e}")
 
