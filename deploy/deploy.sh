@@ -13,36 +13,42 @@ echo "Server: $SERVER"
 echo "Remote: $REMOTE_DIR"
 echo ""
 
+# Create remote directory
+echo "[1/5] Creating remote directory..."
+ssh "$SERVER" "mkdir -p $REMOTE_DIR"
+
 # Sync project files (excluding unnecessary stuff)
-echo "[1/4] Syncing files to server..."
+echo "[2/5] Syncing files to server..."
 rsync -avz --delete \
     --exclude '.git' \
     --exclude '__pycache__' \
     --exclude '*.pyc' \
     --exclude '.env' \
     --exclude 'venv' \
-    --exclude 'deploy' \
+    --exclude 'register' \
     --exclude '*.log' \
     "$LOCAL_DIR/" "$SERVER:$REMOTE_DIR/"
 
-# Copy .env if it exists locally (won't overwrite if exists remotely)
+# Copy .env if it exists locally
 if [[ -f "$LOCAL_DIR/.env" ]]; then
-    echo "[2/4] Copying .env (if not exists on server)..."
-    ssh "$SERVER" "test -f $REMOTE_DIR/.env || echo 'needs_env'" | grep -q 'needs_env' && \
-        scp "$LOCAL_DIR/.env" "$SERVER:$REMOTE_DIR/.env" || \
-        echo "  .env already exists on server, skipping"
+    if ssh "$SERVER" "test -f $REMOTE_DIR/.env"; then
+        echo "[3/5] .env already exists on server, skipping (delete remote .env to overwrite)"
+    else
+        echo "[3/5] Copying .env to server..."
+        scp "$LOCAL_DIR/.env" "$SERVER:$REMOTE_DIR/.env"
+    fi
 else
-    echo "[2/4] No local .env, skipping..."
+    echo "[3/5] WARNING: No local .env file! Create one on server at $REMOTE_DIR/.env"
 fi
 
 # Install dependencies and setup on server
-echo "[3/4] Setting up venv and installing dependencies..."
+echo "[4/5] Setting up venv and installing dependencies..."
 ssh "$SERVER" "cd $REMOTE_DIR && \
     python3 -m venv venv && \
     ./venv/bin/pip install -r requirements.txt --quiet"
 
 # Copy and enable systemd service
-echo "[4/4] Setting up systemd service..."
+echo "[5/5] Setting up systemd service..."
 ssh "$SERVER" "cp $REMOTE_DIR/deploy/cyber-dashboard.service /etc/systemd/system/ && \
     systemctl daemon-reload && \
     systemctl enable cyber-dashboard && \
