@@ -205,6 +205,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
     console.log('Cybernetics Dashboard 3.0 initialized ⚡');
 
+    // Members search functionality
+    const memberSearch = document.getElementById('memberSearch');
+    const membersGrid = document.getElementById('membersGrid');
+
+    if (memberSearch && membersGrid) {
+        memberSearch.addEventListener('input', function() {
+            const query = this.value.toLowerCase().trim();
+            const cards = membersGrid.querySelectorAll('.member-card');
+
+            cards.forEach(card => {
+                const name = card.dataset.name || '';
+                // Also search in X handle (visible in the card)
+                const xHandle = card.querySelector('a[href*="x.com"]');
+                const xHandleText = xHandle ? xHandle.textContent.toLowerCase() : '';
+
+                if (name.includes(query) || xHandleText.includes(query)) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+    }
+
     // Back to Top button functionality
     const backToTopButton = document.getElementById('back-to-top');
 
