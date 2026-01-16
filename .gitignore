@@ -56,6 +56,9 @@ node_modules/
 # Separate repos (cloned locally)
 register/
 
+# Deploy folder (contains credentials)
+deploy/
+
 # Backup files
 *.bak
 *.backup

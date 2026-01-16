@@ -2,62 +2,76 @@
 set -euo pipefail
 
 # Cybernetics Dashboard Deployment Script
-# Deploys dashboard3 to tonyler.is-not-a.dev
+# Deploys entire /cyber dir to tonyler.is-not-a.dev/cyber
 
-SERVER="root@37.27.15.9"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOCAL_DIR="$(dirname "$SCRIPT_DIR")"
 REMOTE_DIR="/opt/cyber-dashboard"
-LOCAL_DIR="$(dirname "$0")/.."
+
+# Load credentials
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    source "$SCRIPT_DIR/.env"
+else
+    echo "ERROR: $SCRIPT_DIR/.env not found!"
+    exit 1
+fi
+
+SERVER="${HETZNER_USER}@${HETZNER_HOST}"
+export SSHPASS="$HETZNER_PASS"
 
 echo "=== Cybernetics Dashboard Deployment ==="
 echo "Server: $SERVER"
 echo "Remote: $REMOTE_DIR"
 echo ""
 
-# Create remote directory
-echo "[1/5] Creating remote directory..."
-ssh "$SERVER" "mkdir -p $REMOTE_DIR"
-
-# Sync project files (excluding unnecessary stuff)
-echo "[2/5] Syncing files to server..."
-rsync -avz --delete \
-    --exclude '.git' \
-    --exclude '__pycache__' \
-    --exclude '*.pyc' \
-    --exclude '.env' \
-    --exclude 'venv' \
-    --exclude 'register' \
-    --exclude '*.log' \
-    "$LOCAL_DIR/" "$SERVER:$REMOTE_DIR/"
-
-# Copy .env if it exists locally
-if [[ -f "$LOCAL_DIR/.env" ]]; then
-    if ssh "$SERVER" "test -f $REMOTE_DIR/.env"; then
-        echo "[3/5] .env already exists on server, skipping (delete remote .env to overwrite)"
-    else
-        echo "[3/5] Copying .env to server..."
-        scp "$LOCAL_DIR/.env" "$SERVER:$REMOTE_DIR/.env"
-    fi
-else
-    echo "[3/5] WARNING: No local .env file! Create one on server at $REMOTE_DIR/.env"
+# Check sshpass is installed
+if ! command -v sshpass &> /dev/null; then
+    echo "Installing sshpass..."
+    sudo apt install -y sshpass
 fi
 
-# Install dependencies and setup on server
-echo "[4/5] Setting up venv and installing dependencies..."
-ssh "$SERVER" "cd $REMOTE_DIR && \
+# Create remote directory
+echo "[1/4] Creating remote directory..."
+sshpass -e ssh -o StrictHostKeyChecking=no "$SERVER" "mkdir -p $REMOTE_DIR"
+
+# Sync ALL project files (only exclude pycache, venv, .git, register)
+echo "[2/4] Syncing all files to server (including .env and credentials)..."
+sshpass -e rsync -avz --delete \
+    --exclude '__pycache__' \
+    --exclude '*.pyc' \
+    --exclude 'venv' \
+    --exclude '.git' \
+    --exclude 'register' \
+    --exclude 'deploy' \
+    -e "ssh -o StrictHostKeyChecking=no" \
+    "$LOCAL_DIR/" "$SERVER:$REMOTE_DIR/"
+
+# Also copy deploy folder (for service file)
+sshpass -e rsync -avz \
+    --exclude '__pycache__' \
+    --exclude '.env' \
+    -e "ssh -o StrictHostKeyChecking=no" \
+    "$SCRIPT_DIR/" "$SERVER:$REMOTE_DIR/deploy/"
+
+# Install dependencies in venv
+echo "[3/4] Setting up venv and installing dependencies..."
+sshpass -e ssh -o StrictHostKeyChecking=no "$SERVER" "cd $REMOTE_DIR && \
     python3 -m venv venv && \
+    ./venv/bin/pip install --upgrade pip --quiet && \
     ./venv/bin/pip install -r requirements.txt --quiet"
 
-# Copy and enable systemd service
-echo "[5/5] Setting up systemd service..."
-ssh "$SERVER" "cp $REMOTE_DIR/deploy/cyber-dashboard.service /etc/systemd/system/ && \
+# Setup and restart systemd service
+echo "[4/4] Setting up systemd service..."
+sshpass -e ssh -o StrictHostKeyChecking=no "$SERVER" "
+    cp $REMOTE_DIR/deploy/cyber-dashboard.service /etc/systemd/system/ && \
     systemctl daemon-reload && \
     systemctl enable cyber-dashboard && \
     systemctl restart cyber-dashboard"
 
 echo ""
 echo "=== Deployment Complete ==="
-echo "Dashboard running at: https://tonyler.is-not-a.dev"
+echo "Dashboard: https://tonyler.is-not-a.dev/cyber"
 echo ""
 echo "Useful commands:"
-echo "  ssh $SERVER 'systemctl status cyber-dashboard'"
-echo "  ssh $SERVER 'journalctl -u cyber-dashboard -f'"
+echo "  sshpass -e ssh $SERVER 'systemctl status cyber-dashboard'"
+echo "  sshpass -e ssh $SERVER 'journalctl -u cyber-dashboard -f'"
