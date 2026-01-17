@@ -32,6 +32,7 @@ outputs/
 # Local config/secrets
 .env
 .env.*
+github.env
 dashboard2/.env
 *.key
 *.pem

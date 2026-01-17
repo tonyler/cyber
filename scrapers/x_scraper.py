@@ -522,24 +522,24 @@ class XScraper(BaseScraper):
                 logger.debug(f"Error checking article: {e}")
                 continue
 
-        # Fallback: if this is a reply page, the target tweet is often the 2nd article
+        # Fallback: if this is a reply page, the target tweet is the 2nd article
         # (1st is parent, 2nd is the reply we're viewing)
+        # Check if first article is a DIFFERENT tweet (meaning we're viewing a reply)
         if len(articles) >= 2:
-            logger.debug("Target article not found by ID; checking if this is a reply (using 2nd article)")
-            # Verify the 2nd article is actually our target by checking its structure
-            second_article = articles[1]
+            first_article = articles[0]
             try:
-                time_links = second_article.locator('time').locator('xpath=..').all()
-                for time_link in time_links:
+                first_time_links = first_article.locator('time').locator('xpath=..').all()
+                for time_link in first_time_links:
                     href = time_link.get_attribute('href') or ''
-                    if f'/status/{target_tweet_id}' in href:
-                        logger.debug(f"Confirmed 2nd article is our target tweet {target_tweet_id}")
-                        return second_article
-            except Exception:
-                pass
+                    # If first article has a different tweet ID, this is a reply page
+                    if '/status/' in href and f'/status/{target_tweet_id}' not in href:
+                        logger.debug(f"First article is parent tweet; using 2nd article for reply {target_tweet_id}")
+                        return articles[1]
+            except Exception as e:
+                logger.debug(f"Error checking first article: {e}")
 
-        # Final fallback: use first article
-        logger.debug("Using first article as fallback")
+        # Final fallback: use first article (standalone tweet)
+        logger.debug("Using first article as fallback (likely standalone tweet)")
         return self.page.locator('article').first
 
     def _extract_x_metrics(self, tweet_url: str) -> Dict[str, int]:
