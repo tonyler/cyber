@@ -18,7 +18,7 @@
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <script>
         tailwind.config = {
@@ -27,6 +27,7 @@
                     fontFamily: {
                         sans: ['Manrope', 'sans-serif'],
                         display: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
                     },
                     colors: {
                         cyber: {
@@ -60,6 +61,12 @@
 
     <!-- Animated Background Glow -->
     <div class="cyber-glow"></div>
+
+    <!-- CRT Scanline Overlay -->
+    <div class="scanline-overlay"></div>
+
+    <!-- Noise/Grain Texture Overlay -->
+    <div class="noise-overlay"></div>
 
     <!-- Navigation -->
     <nav class="cyber-nav sticky top-0 z-50">
@@ -135,7 +142,7 @@
                 </div>
                 <div class="flex items-center space-x-2">
                     <div class="status-dot"></div>
-                    <span class="text-sm text-cyan-400 font-display tracking-wider">SYSTEM ONLINE</span>
+                    <span class="text-sm text-cyan-400 font-mono tracking-wider">SYSTEM ONLINE<span class="terminal-cursor">_</span></span>
                 </div>
             </div>
         </div>
