@@ -221,6 +221,17 @@ def members():
             if not discord_user:
                 continue
 
+            # Fix x_handle if it's invalid (extract from x_profile_url)
+            x_handle = member.get('x_handle', '')
+            if not x_handle or x_handle.lower() in ('active', 'inactive', ''):
+                x_profile_url = member.get('x_profile_url', '')
+                if x_profile_url:
+                    # Extract handle from URL or use as-is if it's just a handle
+                    if 'x.com/' in x_profile_url or 'twitter.com/' in x_profile_url:
+                        member['x_handle'] = x_profile_url.rstrip('/').split('/')[-1]
+                    else:
+                        member['x_handle'] = x_profile_url.lstrip('@')
+
             # Get all activities for this member
             x_activities = members_service.get_x_activities_by_member(discord_user) if members_service else []
             reddit_activities = members_service.get_reddit_activities_by_member(discord_user) if members_service else []

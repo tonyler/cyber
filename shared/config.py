@@ -14,7 +14,6 @@ SHARED_DIR = PROJECT_ROOT / "shared"
 DATABASE_DIR = PROJECT_ROOT / "database"
 LOGS_DIR = PROJECT_ROOT / "logs"
 CREDENTIALS_FILE = SHARED_DIR / "credentials" / "google.json"
-BOT_CONFIG_FILE = SHARED_DIR / "config" / "bot_config.json"
 
 
 def load_env() -> None:

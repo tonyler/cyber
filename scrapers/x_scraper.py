@@ -733,6 +733,60 @@ class XScraper(BaseScraper):
             if tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
 
+    def _update_metrics_csv(self, target_url: str, metrics: Dict):
+        """Update metrics (impressions, likes, comments, retweets) in links.csv."""
+        if not target_url or not metrics:
+            return
+
+        csv_path = Path(__file__).parent.parent / "database" / "links.csv"
+        if not csv_path.exists():
+            logger.warning(f"links.csv not found at {csv_path}")
+            return
+
+        try:
+            with csv_path.open('r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames or []
+                rows = list(reader)
+        except Exception as e:
+            logger.warning(f"Failed to read links.csv: {e}")
+            return
+
+        normalized_target = self._normalize_x_url(target_url)
+        updated = False
+        for row in rows:
+            row_url = self._normalize_x_url(row.get('url') or row.get('target_url', ''))
+            if row_url and row_url == normalized_target:
+                # Update metrics
+                if metrics.get('impressions') is not None:
+                    row['impressions'] = str(metrics['impressions'])
+                if metrics.get('likes') is not None:
+                    row['likes'] = str(metrics['likes'])
+                if metrics.get('comments') is not None:
+                    row['comments'] = str(metrics['comments'])
+                if metrics.get('reposts') is not None:
+                    row['retweets'] = str(metrics['reposts'])
+                # Update synced_at timestamp
+                row['synced_at'] = datetime.now().isoformat()
+                updated = True
+                break
+
+        if not updated:
+            return
+
+        tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
+        try:
+            with tmp_path.open('w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+            tmp_path.replace(csv_path)
+            logger.info(f"✅ Updated metrics in CSV for {normalized_target}")
+        except Exception as e:
+            logger.warning(f"Failed to write links.csv: {e}")
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+
     def _update_stats_sheet(self, link: Dict, metrics: Dict[str, int]):
         """Update stats in Google Sheets"""
         if not self.stats_updater:
@@ -1038,6 +1092,7 @@ class XScraper(BaseScraper):
                 metrics.get('reposts'),
             ]
             if metrics and any(value is not None for value in metric_values):
+                self._update_metrics_csv(url, metrics)
                 self._update_stats_sheet(link, metrics)
 
             return len(matched_activities)

@@ -3,7 +3,6 @@ from discord import app_commands
 from discord.ext import commands
 import sys
 import csv
-import json
 import hashlib
 import re
 from pathlib import Path
@@ -15,15 +14,12 @@ _bot_dir = Path(__file__).resolve().parent
 _project_root = _bot_dir.parent
 sys.path.insert(0, str(_project_root / "shared"))
 
-from config import BOT_CONFIG_FILE, discord_token, load_env
+from config import discord_token, load_env
 
 load_env()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-with open(BOT_CONFIG_FILE) as f:
-    config = json.load(f)
 
 # Database paths
 DATABASE_DIR = _project_root / "database"
@@ -86,7 +82,6 @@ def _gen_id(url: str) -> str:
 class ContentBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.channel_id = int(config['content_channel_id']) if config.get('content_channel_id', 'CHANNEL_ID_HERE') != 'CHANNEL_ID_HERE' else None
 
     def detect_platform(self, url):
         url_lower = url.lower()
@@ -171,7 +166,6 @@ class ContentBot(commands.Cog):
 class RegistrationBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.channel_id = int(config['registration_channel_id']) if config.get('registration_channel_id', 'CHANNEL_ID_HERE') != 'CHANNEL_ID_HERE' else None
 
     def normalize_x_handle(self, url):
         if not url:
@@ -240,10 +234,6 @@ class RegistrationBot(commands.Cog):
     async def register(self, interaction: discord.Interaction, x_profile: str = '', reddit_profile: str = ''):
         if not x_profile and not reddit_profile:
             await interaction.response.send_message("Please provide at least one profile (X or Reddit).", ephemeral=True)
-            return
-
-        if self.channel_id and interaction.channel_id != self.channel_id:
-            await interaction.response.send_message("Please use this command in the registration channel only.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)

@@ -42,8 +42,6 @@ if [ ! -f "$LOGS_DIR/bot.pid" ]; then
         log_warn "Bot entrypoint missing; skipping Discord bot."
     elif [ ! -f "$PROJECT_ROOT/.env" ]; then
         log_warn "Project .env missing at $PROJECT_ROOT/.env; skipping Discord bot."
-    elif [ ! -f "$PROJECT_ROOT/shared/credentials/google.json" ]; then
-        log_warn "Google credentials missing at $PROJECT_ROOT/shared/credentials/google.json; skipping Discord bot."
     else
         if [ ! -f "$PROJECT_ROOT/bot/requirements.txt" ]; then
             log_warn "Bot requirements.txt missing; attempting to start with existing environment."
