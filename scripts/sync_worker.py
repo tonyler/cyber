@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """
-Sync Worker - Simple one-way syncs:
-- Members: Google Sheets → local CSV (members register via sheets/bot)
-- Links/Posts: local CSV → Google Sheets (scraper is source of truth)
-- Activities: local CSV → Google Sheets (scraper writes activities)
+Sync Worker - Data flow management between local CSVs and Google Sheets.
+
+DATA FLOW DIRECTION:
+====================
+┌─────────────────────────────────────────────────────────────────┐
+│  MEMBERS:     Discord Bot → Google Sheets → Local CSV           │
+│               (Sheets = source of truth, CSV = local cache)     │
+│                                                                 │
+│  ACTIVITIES:  X Scraper → Local CSV → Google Sheets             │
+│               (CSV = source of truth, Sheets = backup)          │
+│                                                                 │
+│  LINKS:       X Scraper → Local CSV → Google Sheets             │
+│               (CSV = source of truth, Sheets = backup)          │
+└─────────────────────────────────────────────────────────────────┘
 """
 
 import sys
@@ -82,20 +92,37 @@ def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]):
         return False
 
 
+def _get_sheet_data_as_dict(worksheet, key_column: int) -> dict:
+    """Get all sheet rows as dict keyed by specified column index."""
+    try:
+        all_values = worksheet.get_all_values()
+        if len(all_values) <= 1:
+            return {}
+        result = {}
+        for row_idx, row in enumerate(all_values[1:], start=2):
+            if row and len(row) > key_column:
+                key = row[key_column]
+                if key:
+                    result[key] = {'row_idx': row_idx, 'data': row}
+        return result
+    except Exception as e:
+        logger.warning(f"Could not read sheet data: {e}")
+        return {}
+
+
 # ============================================================
-# MEMBERS: Local → Sheets
+# MEMBERS: Google Sheets → Local CSV
+# (Discord bot writes to Sheets, sync pulls to local CSV cache)
 # ============================================================
 
-def sync_members_to_sheets(gc, members_sheet_id: str) -> int:
-    """Upload members.csv to Google Sheets - exact CSV mirror."""
+def download_members_from_sheets(gc, members_sheet_id: str) -> int:
+    """Download members FROM Google Sheets TO local CSV.
+
+    Direction: Sheets → CSV
+    Reason: Discord bot writes directly to Sheets (source of truth)
+    """
     csv_path = project_root / "database" / "members.csv"
-    rows = _read_csv(csv_path)
 
-    if not rows:
-        logger.info("No members to sync")
-        return 0
-
-    # CSV headers - exact match
     headers = ['discord_user', 'x_handle', 'reddit_username', 'status',
                'joined_date', 'last_activity', 'total_points', 'last_active',
                'total_tasks', 'x_profile_url', 'reddit_profile_url', 'registration_date']
@@ -103,67 +130,71 @@ def sync_members_to_sheets(gc, members_sheet_id: str) -> int:
     try:
         spreadsheet = gc.open_by_key(members_sheet_id)
 
-        # Get or create worksheet
         try:
             worksheet = spreadsheet.worksheet("Member Registry")
         except Exception:
-            worksheet = spreadsheet.add_worksheet(title="Member Registry", rows=500, cols=len(headers))
+            logger.warning("Member Registry worksheet not found")
+            return 0
 
-        # Clear and rewrite with exact CSV format
-        worksheet.clear()
-        worksheet.update(values=[headers], range_name='A1')
+        all_values = worksheet.get_all_values()
+        if len(all_values) <= 1:
+            logger.info("No members in sheet")
+            return 0
 
-        # Prepare all rows matching CSV exactly
-        sheet_rows = []
-        for r in rows:
-            sheet_rows.append([
-                r.get('discord_user', ''),
-                r.get('x_handle', ''),
-                r.get('reddit_username', ''),
-                r.get('status', ''),
-                r.get('joined_date', ''),
-                r.get('last_activity', ''),
-                r.get('total_points', ''),
-                r.get('last_active', ''),
-                r.get('total_tasks', ''),
-                r.get('x_profile_url', ''),
-                r.get('reddit_profile_url', ''),
-                r.get('registration_date', ''),
-            ])
+        rows = []
+        for row in all_values[1:]:
+            if not row or not row[0]:
+                continue
+            while len(row) < len(headers):
+                row.append('')
+            rows.append({
+                'discord_user': row[0],
+                'x_handle': row[1],
+                'reddit_username': row[2],
+                'status': row[3],
+                'joined_date': row[4],
+                'last_activity': row[5],
+                'total_points': row[6],
+                'last_active': row[7],
+                'total_tasks': row[8],
+                'x_profile_url': row[9],
+                'reddit_profile_url': row[10],
+                'registration_date': row[11] if len(row) > 11 else '',
+            })
 
-        if sheet_rows:
-            worksheet.update(values=sheet_rows, range_name=f'A2:L{len(sheet_rows)+1}', value_input_option='RAW')
-            logger.info(f"Synced {len(sheet_rows)} members to Member Registry (full refresh)")
-
-        return len(sheet_rows)
+        if _write_csv(csv_path, rows, headers):
+            logger.info(f"[Sheets→CSV] Downloaded {len(rows)} members to local cache")
+            return len(rows)
+        return 0
 
     except Exception as e:
-        logger.error(f"Failed to sync members to sheets: {e}")
+        logger.error(f"Failed to download members: {e}")
         return 0
 
 
 # ============================================================
-# LINKS: Local → Sheets
+# LINKS: Local CSV → Google Sheets (backup)
+# (Scraper writes to CSV, sync backs up to Sheets)
 # ============================================================
 
-def sync_links_to_sheets(gc, tasks_sheet_id: str) -> int:
-    """Upload links.csv to Google Sheets - exact CSV mirror."""
+def backup_links_to_sheets(gc, tasks_sheet_id: str) -> int:
+    """Backup links FROM local CSV TO Google Sheets.
+
+    Direction: CSV → Sheets
+    Reason: Scraper writes to CSV (source of truth), Sheets is backup
+    """
     csv_path = project_root / "database" / "links.csv"
     rows = _read_csv(csv_path)
 
     if not rows:
-        logger.info("No links to sync")
         return 0
 
-    # Filter to current month
     year_month = _current_year_month()
     month_rows = [r for r in rows if r.get('year_month') == year_month]
 
     if not month_rows:
-        logger.info(f"No links for {year_month}")
         return 0
 
-    # CSV headers - exact match
     headers = ['id', 'platform', 'url', 'author', 'year_month', 'date',
                'impressions', 'likes', 'comments', 'retweets', 'content', 'title', 'synced_at']
 
@@ -171,21 +202,28 @@ def sync_links_to_sheets(gc, tasks_sheet_id: str) -> int:
         spreadsheet = gc.open_by_key(tasks_sheet_id)
         tab_name = _current_month_tab()
 
-        # Get or create worksheet
         try:
             worksheet = spreadsheet.worksheet(tab_name)
         except Exception:
             worksheet = spreadsheet.add_worksheet(title=tab_name, rows=500, cols=len(headers))
+            worksheet.update(values=[headers], range_name='A1')
 
-        # Clear and rewrite with exact CSV format
-        worksheet.clear()
-        worksheet.update(values=[headers], range_name='A1')
+        existing_data = worksheet.get_all_values()
+        if not existing_data:
+            worksheet.update(values=[headers], range_name='A1')
 
-        # Prepare all rows matching CSV exactly
-        sheet_rows = []
+        existing = _get_sheet_data_as_dict(worksheet, key_column=0)
+
+        updates = []
+        appends = []
+
         for r in month_rows:
-            sheet_rows.append([
-                r.get('id', ''),
+            link_id = r.get('id', '')
+            if not link_id:
+                continue
+
+            row_data = [
+                link_id,
                 r.get('platform', ''),
                 r.get('url', ''),
                 r.get('author', ''),
@@ -195,44 +233,56 @@ def sync_links_to_sheets(gc, tasks_sheet_id: str) -> int:
                 r.get('likes', ''),
                 r.get('comments', ''),
                 r.get('retweets', ''),
-                (r.get('content', '') or '')[:1000],  # Truncate for sheets
+                (r.get('content', '') or '')[:1000],
                 r.get('title', ''),
                 r.get('synced_at', ''),
-            ])
+            ]
 
-        if sheet_rows:
-            worksheet.update(values=sheet_rows, range_name=f'A2:M{len(sheet_rows)+1}', value_input_option='RAW')
-            logger.info(f"Synced {len(sheet_rows)} links to {tab_name} (full refresh)")
+            if link_id in existing:
+                row_idx = existing[link_id]['row_idx']
+                updates.append({'range': f'A{row_idx}:M{row_idx}', 'values': [row_data]})
+            else:
+                appends.append(row_data)
 
-        return len(sheet_rows)
+        if updates:
+            worksheet.batch_update(updates, value_input_option='RAW')
+
+        if appends:
+            worksheet.append_rows(appends, value_input_option='RAW')
+
+        logger.info(f"[CSV→Sheets] Backed up links to {tab_name}: {len(updates)} updated, {len(appends)} added")
+        return len(updates) + len(appends)
 
     except Exception as e:
-        logger.error(f"Failed to sync links to sheets: {e}")
+        logger.error(f"Failed to backup links: {e}")
         return 0
 
 
 # ============================================================
-# ACTIVITIES: Local → Sheets
+# ACTIVITIES: Local CSV → Google Sheets (backup)
+# (Scraper writes to CSV, sync backs up to Sheets)
 # ============================================================
 
-def sync_activities_to_sheets(gc, activity_sheet_id: str) -> int:
-    """Upload x_activity_log.csv to Google Sheets - exact CSV mirror."""
+def backup_activities_to_sheets(gc, activity_sheet_id: str) -> int:
+    """Backup activities FROM local CSV TO Google Sheets.
+
+    Direction: CSV → Sheets
+    Reason: Scraper writes to CSV (source of truth), Sheets is backup
+    """
     csv_path = project_root / "database" / "x_activity_log.csv"
     rows = _read_csv(csv_path)
 
     if not rows:
         return 0
 
-    # CSV headers - exact match
     headers = ['date', 'time', 'discord_user', 'x_handle', 'activity_type',
                'activity_url', 'target_url', 'task_id', 'notes']
 
-    # Group by month
     rows_by_month = defaultdict(list)
     for r in rows:
         date_str = r.get('date', '')
         if date_str and len(date_str) >= 7:
-            ym = date_str[:7]  # YYYY-MM
+            ym = date_str[:7]
             try:
                 dt = datetime.strptime(ym, "%Y-%m")
                 if month_tab_format == "MM/YYYY":
@@ -256,42 +306,57 @@ def sync_activities_to_sheets(gc, activity_sheet_id: str) -> int:
 
     for tab_name, tab_rows in rows_by_month.items():
         try:
-            # Get or create worksheet
             try:
                 worksheet = spreadsheet.worksheet(tab_name)
             except Exception:
                 worksheet = spreadsheet.add_worksheet(title=tab_name, rows=2000, cols=len(headers))
+                worksheet.update(values=[headers], range_name='A1')
 
-            # Clear and rewrite with exact CSV format
-            worksheet.clear()
-            worksheet.update(values=[headers], range_name='A1')
+            existing_data = worksheet.get_all_values()
+            if not existing_data:
+                worksheet.update(values=[headers], range_name='A1')
 
-            # Prepare all rows matching CSV exactly
-            sheet_rows = []
+            existing = _get_sheet_data_as_dict(worksheet, key_column=5)
+
+            updates = []
+            appends = []
+
             for r in tab_rows:
-                sheet_rows.append([
+                activity_url = r.get('activity_url', '')
+                if not activity_url:
+                    continue
+
+                row_data = [
                     r.get('date', ''),
                     r.get('time', ''),
                     r.get('discord_user', ''),
                     r.get('x_handle', ''),
                     r.get('activity_type', ''),
-                    r.get('activity_url', ''),
+                    activity_url,
                     r.get('target_url', ''),
                     r.get('task_id', ''),
                     r.get('notes', ''),
-                ])
+                ]
 
-            if sheet_rows:
-                # Batch update
-                for start in range(0, len(sheet_rows), 500):
-                    batch = sheet_rows[start:start + 500]
-                    end_row = start + len(batch) + 1
-                    worksheet.update(values=batch, range_name=f'A{start+2}:I{end_row}', value_input_option='RAW')
-                logger.info(f"Synced {len(sheet_rows)} activities to {tab_name} (full refresh)")
-                total_synced += len(sheet_rows)
+                if activity_url in existing:
+                    row_idx = existing[activity_url]['row_idx']
+                    updates.append({'range': f'A{row_idx}:I{row_idx}', 'values': [row_data]})
+                else:
+                    appends.append(row_data)
+
+            if updates:
+                for start in range(0, len(updates), 500):
+                    batch = updates[start:start + 500]
+                    worksheet.batch_update(batch, value_input_option='RAW')
+
+            if appends:
+                worksheet.append_rows(appends, value_input_option='RAW')
+
+            logger.info(f"[CSV→Sheets] Backed up activities to {tab_name}: {len(updates)} updated, {len(appends)} added")
+            total_synced += len(updates) + len(appends)
 
         except Exception as e:
-            logger.warning(f"Failed to sync activities to {tab_name}: {e}")
+            logger.warning(f"Failed to backup activities to {tab_name}: {e}")
 
     return total_synced
 
@@ -303,7 +368,7 @@ def sync_activities_to_sheets(gc, activity_sheet_id: str) -> int:
 def run_sync():
     """Run one sync cycle."""
     logger.info("=" * 60)
-    logger.info(f"Starting sync at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Sync started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("=" * 60)
 
     members_sheet_id = get_members_sheet_id()
@@ -325,24 +390,30 @@ def run_sync():
         logger.error(f"Failed to authenticate with Google: {e}")
         return
 
-    # 1. Members: Local → Sheets
-    members_synced = sync_members_to_sheets(gc, members_sheet_id)
+    # 1. Members: Download FROM Sheets TO local CSV (Sheets = source of truth)
+    members_count = download_members_from_sheets(gc, members_sheet_id)
 
-    # 2. Links: Local → Sheets
-    links_synced = sync_links_to_sheets(gc, tasks_sheet_id)
+    # 2. Links: Backup FROM local CSV TO Sheets (CSV = source of truth)
+    links_count = backup_links_to_sheets(gc, tasks_sheet_id)
 
-    # 3. Activities: Local → Sheets
-    activities_synced = sync_activities_to_sheets(gc, activity_sheet_id)
+    # 3. Activities: Backup FROM local CSV TO Sheets (CSV = source of truth)
+    activities_count = backup_activities_to_sheets(gc, activity_sheet_id)
 
-    logger.info(f"Sync results: members={members_synced}, links={links_synced}, activities={activities_synced}")
+    logger.info(f"Sync results: members_downloaded={members_count}, links_backed_up={links_count}, activities_backed_up={activities_count}")
     logger.info("✅ Sync completed")
 
 
 def main():
     logger.info("=" * 60)
-    logger.info("Cybernetics Sync Worker (Minimal)")
+    logger.info("Cybernetics Sync Worker")
     logger.info("=" * 60)
     logger.info(f"Interval: {interval_minutes} minutes")
+    logger.info("")
+    logger.info("Data flow:")
+    logger.info("  MEMBERS:    Sheets → CSV  (Sheets is source of truth)")
+    logger.info("  LINKS:      CSV → Sheets  (CSV is source of truth)")
+    logger.info("  ACTIVITIES: CSV → Sheets  (CSV is source of truth)")
+    logger.info("")
 
     if not enabled:
         logger.warning("Sync disabled in config")

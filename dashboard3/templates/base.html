@@ -15,38 +15,40 @@
     <!-- Custom Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
-    <!-- Fonts -->
+    <!-- Fonts - Robotic Interface -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <script>
         tailwind.config = {
             theme: {
                 extend: {
                     fontFamily: {
-                        sans: ['Manrope', 'sans-serif'],
-                        display: ['Space Grotesk', 'sans-serif'],
-                        mono: ['JetBrains Mono', 'monospace'],
+                        sans: ['Rajdhani', 'sans-serif'],
+                        display: ['Orbitron', 'sans-serif'],
+                        mono: ['Share Tech Mono', 'JetBrains Mono', 'monospace'],
                     },
                     colors: {
                         cyber: {
-                            50: '#e0f7ff',
-                            100: '#b3ecff',
-                            200: '#80e1ff',
-                            300: '#4dd6ff',
-                            400: '#1acbff',
-                            500: '#00bfff',
-                            600: '#0099cc',
-                            700: '#007399',
-                            800: '#004d66',
-                            900: '#002633',
+                            50: '#e0faff',
+                            100: '#b0f0ff',
+                            200: '#80e5ff',
+                            300: '#40d8ff',
+                            400: '#00e5ff',
+                            500: '#00c8e0',
+                            600: '#0088ff',
+                            700: '#0066cc',
+                            800: '#004488',
+                            900: '#002244',
                         },
                         neon: {
-                            cyan: '#00ffff',
-                            blue: '#00bfff',
-                            purple: '#bf00ff',
-                            pink: '#ff00bf',
+                            cyan: '#00e5ff',
+                            blue: '#0088ff',
+                            green: '#00ff6a',
+                            red: '#ff0040',
+                            amber: '#ffaa00',
+                            violet: '#aa00ff',
                         }
                     }
                 }

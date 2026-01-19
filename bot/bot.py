@@ -14,7 +14,8 @@ _bot_dir = Path(__file__).resolve().parent
 _project_root = _bot_dir.parent
 sys.path.insert(0, str(_project_root / "shared"))
 
-from config import discord_token, load_env
+from config import discord_token, members_sheet_id, CREDENTIALS_FILE, load_env
+from sheets_members_service import SheetsMemberService
 
 load_env()
 
@@ -166,6 +167,25 @@ class ContentBot(commands.Cog):
 class RegistrationBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self._sheets_service = None
+
+    def _get_sheets_service(self) -> SheetsMemberService | None:
+        """Lazy-load sheets service for member registration."""
+        if self._sheets_service is None:
+            sheet_id = members_sheet_id()
+            if not sheet_id or not CREDENTIALS_FILE.exists():
+                logger.warning("Sheets service unavailable: missing credentials or sheet ID")
+                return None
+            self._sheets_service = SheetsMemberService(CREDENTIALS_FILE, sheet_id)
+        return self._sheets_service
+
+    def save_member_to_sheets(self, discord_user: str, x_handle: str, reddit_username: str) -> bool:
+        """Save member directly to Google Sheets (source of truth)."""
+        service = self._get_sheets_service()
+        if not service:
+            logger.error("Cannot save to sheets: service unavailable")
+            return False
+        return service.upsert_member(discord_user, x_handle, reddit_username)
 
     def normalize_x_handle(self, url):
         if not url:
@@ -243,7 +263,7 @@ class RegistrationBot(commands.Cog):
             x_handle = self.normalize_x_handle(x_profile)
             reddit_username = self.normalize_reddit_username(reddit_profile)
 
-            success = self.save_member_to_csv(discord_user, x_handle, reddit_username)
+            success = self.save_member_to_sheets(discord_user, x_handle, reddit_username)
 
             if not success:
                 await interaction.followup.send("❌ Failed to register. Please try again.", ephemeral=True)

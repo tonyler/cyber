@@ -21,7 +21,24 @@
       "Bash(pwdx:*)",
       "Bash(python test_single_post.py:*)",
       "Bash(git stash:*)",
-      "Bash(ghsync pull:*)"
+      "Bash(ghsync pull:*)",
+      "Bash(git -C /root/cyber ls-tree:*)",
+      "Bash(pkill:*)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(/root/cyber/venv/bin/python3:*)",
+      "Bash(systemctl list-units:*)",
+      "Bash(echo \"Date range of activities:\" cut -d',' -f1 database/x_activity_log.csv)",
+      "Bash(uniq -c __NEW_LINE_4515eaf66902c23b__ echo \"\" echo \"Links count:\" wc -l database/links.csv __NEW_LINE_4515eaf66902c23b__ echo \"\" echo \"Sample links:\" head -5 database/links.csv)",
+      "Bash(crontab:*)",
+      "Bash(./venv/bin/python:*)",
+      "Skill(code-review)",
+      "Bash(pip3 list:*)",
+      "Bash(./scripts/stop_all.sh:*)",
+      "Bash(./scripts/start_all.sh:*)"
     ]
   }
 }
