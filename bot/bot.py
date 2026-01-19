@@ -202,7 +202,9 @@ class RegistrationBot(commands.Cog):
             return ''
         url = url.strip()
         if 'reddit.com/' in url and ('u/' in url or 'user/' in url):
-            username = url.rstrip('/').split('/')[-1]
+            # Extract username right after u/ or user/, ignoring /s/shareID suffix
+            match = re.search(r'(?:u|user)/([^/]+)', url)
+            username = match.group(1) if match else url.split('/')[-1]
         else:
             username = url
         if username.startswith('u/'):
