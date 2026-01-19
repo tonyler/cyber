@@ -109,26 +109,26 @@ def main() -> None:
     month_key = today_obj.strftime("%Y-%m")
     snapshot_path = ACTIONS_DIR / f"{month_key}-actions.csv"
 
+    # Get activity counts by actual activity date (not snapshot date)
     counts = _aggregate_actions(month_key)
+
+    # Build rows from actual per-day activity counts
+    rows: List[dict[str, str]] = []
+    sorted_dates = sorted(counts.keys())
+    cumulative = 0
+    for day in sorted_dates:
+        day_count = counts[day]
+        cumulative += day_count
+        rows.append({
+            "date": day,
+            "total_actions": str(cumulative),
+            "difference": str(day_count),
+        })
+
+    _write_snapshot(snapshot_path, rows)
+
     total_actions = sum(counts.values())
-
-    rows = _load_snapshot(snapshot_path)
-    previous = _previous_total(rows, today_obj.strftime("%Y-%m-%d"))
-    difference = total_actions - previous
-
-    today_row = {
-        "date": today_obj.strftime("%Y-%m-%d"),
-        "total_actions": str(total_actions),
-        "difference": str(difference),
-    }
-
-    by_date = {row.get("date", ""): row for row in rows if row.get("date")}
-    by_date[today_row["date"]] = today_row
-
-    updated_rows = _sorted_rows(by_date.values())
-    _write_snapshot(snapshot_path, updated_rows)
-
-    LOG.info("Recorded actions snapshot for %s: total=%d (Δ=%d)", today_row["date"], total_actions, difference)
+    LOG.info("Recorded actions for %s: %d total across %d days", month_key, total_actions, len(rows))
 
 
 if __name__ == "__main__":
