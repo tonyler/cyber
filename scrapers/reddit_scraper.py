@@ -1,5 +1,8 @@
+import csv
+import re
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -47,15 +50,87 @@ class RedditScraper(BaseScraper):
             logger.error(f"Error fetching Reddit links: {str(e)}", exc_info=True)
             return []
 
+    def _to_old_reddit(self, url: str) -> str:
+        """Convert any Reddit URL to old.reddit.com format"""
+        if 'old.reddit.com' in url:
+            return url
+        url = url.replace('www.reddit.com', 'old.reddit.com')
+        url = url.replace('://reddit.com', '://old.reddit.com')
+        return url
+
+    def scrape_post_metrics(self, post_url: str) -> Dict[str, int]:
+        """Scrape upvotes and comment count from Reddit post (old.reddit.com)"""
+        metrics = {'upvotes': 0, 'comments': 0}
+
+        try:
+            # Convert to old.reddit.com if needed
+            post_url = self._to_old_reddit(post_url)
+
+            # Handle share URLs (reddit.com/r/sub/s/xxx)
+            if '/s/' in post_url:
+                self._safe_get(post_url)
+                time.sleep(2)
+                post_url = self._to_old_reddit(self.page.url)
+                self._safe_get(post_url)
+                time.sleep(2)
+
+            # Extract upvotes - try multiple selectors for old.reddit.com
+            score_selectors = [
+                '.thing.link .score.unvoted',
+                '.thing.link .score.likes',
+                '.thing.link .score.dislikes',
+                '.sitetable .score.unvoted',
+                '.sitetable .score',
+                '.linkinfo .score .number',
+            ]
+            for selector in score_selectors:
+                try:
+                    score_el = self.page.locator(selector).first
+                    if score_el.count() > 0:
+                        score_text = score_el.text_content() or '0'
+                        # Parse "123 points", "123", or just a number
+                        clean_text = score_text.replace(',', '').strip()
+                        match = re.search(r'(\d+)', clean_text)
+                        if match:
+                            metrics['upvotes'] = int(match.group(1))
+                            break
+                except Exception:
+                    continue
+
+            # Extract comment count - try multiple selectors
+            comment_selectors = [
+                '.thing.link a.comments',
+                '.sitetable a.comments',
+                '.linkinfo .comments .number',
+            ]
+            for selector in comment_selectors:
+                try:
+                    comments_el = self.page.locator(selector).first
+                    if comments_el.count() > 0:
+                        comments_text = comments_el.text_content() or '0'
+                        # Parse "42 comments" or "comment"
+                        match = re.search(r'(\d+)', comments_text)
+                        if match:
+                            metrics['comments'] = int(match.group(1))
+                            break
+                except Exception:
+                    continue
+
+            if self.verbose_metrics:
+                logger.info(f"Reddit metrics for {post_url}: upvotes={metrics['upvotes']}, comments={metrics['comments']}")
+
+        except Exception as e:
+            logger.warning(f"Error scraping Reddit metrics: {e}")
+
+        return metrics
+
     def scrape_reddit_comments(self, post_url: str) -> List[Dict]:
         logger.info(f"Scraping comments from: {post_url}")
 
         comments = []
 
         try:
-            if 'old.reddit.com' not in post_url:
-                post_url = post_url.replace('reddit.com', 'old.reddit.com')
-
+            post_url = self._to_old_reddit(post_url)
             self._safe_get(post_url)
             time.sleep(3)
 
@@ -146,6 +221,248 @@ class RedditScraper(BaseScraper):
         logger.info(f"Matched {len(matched)}/{len(comments)} comments to registered members")
         return matched
 
+    def _get_existing_csv_activity_urls(self, csv_path: Path) -> set:
+        """Get set of activity URLs already in CSV to prevent duplicates"""
+        if not csv_path.exists():
+            return set()
+
+        existing_urls = set()
+        try:
+            with csv_path.open('r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    url = row.get('activity_url', '').strip()
+                    if url:
+                        existing_urls.add(url)
+        except Exception as e:
+            logger.warning(f"Could not read existing CSV data: {e}")
+            return set()
+
+        return existing_urls
+
+    def write_activities_to_csv(self, activities: List[Dict], target_url: str):
+        """Write activities to reddit_activity_log.csv (append-only)"""
+        if not activities:
+            logger.info("No activities to write to CSV")
+            return
+
+        csv_path = Path(__file__).parent.parent / "database" / "reddit_activity_log.csv"
+        csv_path.parent.mkdir(parents=True, exist_ok=True)
+
+        headers = [
+            'date', 'time', 'discord_user', 'reddit_username', 'activity_type',
+            'activity_url', 'target_url', 'task_id', 'notes'
+        ]
+
+        file_exists = csv_path.exists()
+        existing_urls = self._get_existing_csv_activity_urls(csv_path)
+
+        try:
+            with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+
+                if not file_exists:
+                    writer.writerow(headers)
+                    logger.info(f"Created new CSV file: {csv_path}")
+
+                new_count = 0
+                skipped_count = 0
+
+                for item in activities:
+                    comment = item['comment']
+                    activity_url = comment.get('url', '')
+
+                    if activity_url in existing_urls:
+                        skipped_count += 1
+                        continue
+
+                    row = [
+                        datetime.now().strftime('%Y-%m-%d'),
+                        datetime.now().strftime('%H:%M:%S'),
+                        item['discord_user'],
+                        item['reddit_username'],
+                        'comment',
+                        activity_url,
+                        target_url,
+                        '',
+                        comment.get('text', '')[:500]
+                    ]
+                    writer.writerow(row)
+                    existing_urls.add(activity_url)
+                    new_count += 1
+
+                if new_count > 0:
+                    logger.info(f"✅ Wrote {new_count} new activities to CSV: {csv_path}")
+                if skipped_count > 0:
+                    logger.info(f"⏭️  Skipped {skipped_count} duplicate activities already in CSV")
+
+        except Exception as e:
+            logger.error(f"Failed to write activities to CSV: {e}", exc_info=True)
+
+    def _update_metrics_csv(self, target_url: str, metrics: Dict[str, int]):
+        """Update metrics (upvotes, comments) in links.csv"""
+        csv_path = Path(__file__).parent.parent / "database" / "links.csv"
+        if not csv_path.exists():
+            logger.warning("links.csv not found")
+            return
+
+        try:
+            with csv_path.open('r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames
+                rows = list(reader)
+        except Exception as e:
+            logger.warning(f"Failed to read links.csv: {e}")
+            return
+
+        if not fieldnames:
+            return
+
+        updated = False
+        for row in rows:
+            row_url = row.get('url', '').strip()
+            # Normalize URLs for comparison
+            if self._urls_match(row_url, target_url):
+                row['likes'] = str(metrics.get('upvotes', 0))
+                row['comments'] = str(metrics.get('comments', 0))
+                updated = True
+                break
+
+        if not updated:
+            logger.debug(f"URL not found in links.csv: {target_url}")
+            return
+
+        tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
+        try:
+            with tmp_path.open('w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+            tmp_path.replace(csv_path)
+            logger.info(f"✅ Updated metrics in CSV for {target_url}")
+        except Exception as e:
+            logger.warning(f"Failed to write links.csv: {e}")
+            if tmp_path.exists():
+                tmp_path.unlink(missing_ok=True)
+
+    def _urls_match(self, url1: str, url2: str) -> bool:
+        """Check if two Reddit URLs refer to the same post"""
+        def normalize(url: str) -> str:
+            url = url.lower().strip().rstrip('/')
+            url = url.replace('www.reddit.com', 'reddit.com')
+            url = url.replace('old.reddit.com', 'reddit.com')
+            # Extract post ID if present
+            match = re.search(r'/comments/([a-z0-9]+)', url)
+            if match:
+                return match.group(1)
+            return url
+        return normalize(url1) == normalize(url2)
+
+    def _update_stats_sheet(self, link: Dict, metrics: Dict[str, int]):
+        """Update stats in Google Sheets"""
+        if not self.stats_updater:
+            return
+
+        url = link.get('url', '')
+        year_month = link.get('year_month') or datetime.now().strftime("%Y-%m")
+        sheet_name = self.stats_updater.format_sheet_name(year_month)
+        columns = self.sheet_config.get('sheet_template', {}).get('reddit_columns', {})
+
+        url_col = columns.get('url', 'C')
+        upvotes_col = columns.get('upvotes', 'E')
+        comments_col = columns.get('comments', 'F')
+
+        row_num = self.stats_updater.find_row_by_url(sheet_name, url_col, url)
+        if not row_num:
+            logger.debug(f"Reddit URL not found in sheet {sheet_name}: {url}")
+            return
+
+        values = [metrics.get('upvotes', 0), metrics.get('comments', 0)]
+        success = self.stats_updater.update_row_range(
+            sheet_name, upvotes_col, comments_col, row_num, values
+        )
+
+        if success:
+            logger.info(f"✅ Updated Reddit stats for row {row_num}")
+
+    def _sync_impressions_from_sheet(self, link: Dict):
+        """Sync impressions (views) from Google Sheet back to CSV (for manually added data)"""
+        if not self.stats_updater:
+            return
+
+        url = link.get('url', '')
+        year_month = link.get('year_month') or datetime.now().strftime("%Y-%m")
+        sheet_name = self.stats_updater.format_sheet_name(year_month)
+        columns = self.sheet_config.get('sheet_template', {}).get('reddit_columns', {})
+
+        url_col = columns.get('url', 'C')
+        views_col = columns.get('views', 'D')
+
+        row_num = self.stats_updater.find_row_by_url(sheet_name, url_col, url)
+        if not row_num:
+            return
+
+        # Read impressions value from sheet
+        try:
+            range_name = f"'{sheet_name}'!{views_col}{row_num}"
+            result = self.sheets_service.spreadsheets().values().get(
+                spreadsheetId=self.stats_sheet_id,
+                range=range_name
+            ).execute()
+            values = result.get('values', [[]])
+            impressions_str = values[0][0] if values and values[0] else ''
+        except Exception as e:
+            logger.debug(f"Could not read impressions from sheet: {e}")
+            return
+
+        if not impressions_str:
+            return
+
+        # Parse impressions value
+        try:
+            impressions = int(str(impressions_str).replace(',', '').strip())
+        except (ValueError, TypeError):
+            return
+
+        # Update links.csv with impressions
+        csv_path = Path(__file__).parent.parent / "database" / "links.csv"
+        if not csv_path.exists():
+            return
+
+        try:
+            with csv_path.open('r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                fieldnames = reader.fieldnames
+                rows = list(reader)
+        except Exception:
+            return
+
+        if not fieldnames:
+            return
+
+        updated = False
+        for row in rows:
+            if self._urls_match(row.get('url', ''), url):
+                current_impressions = row.get('impressions', '')
+                if str(impressions) != str(current_impressions):
+                    row['impressions'] = str(impressions)
+                    updated = True
+                    logger.info(f"📥 Synced impressions from sheet: {impressions} for {url}")
+                break
+
+        if updated:
+            tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
+            try:
+                with tmp_path.open('w', newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(rows)
+                tmp_path.replace(csv_path)
+            except Exception as e:
+                logger.warning(f"Failed to sync impressions to CSV: {e}")
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+
     def _get_current_month_tab(self) -> str:
         """Get current month tab name based on config format (e.g., '01/26')"""
         now = datetime.now()
@@ -224,11 +541,27 @@ class RedditScraper(BaseScraper):
         logger.info("=" * 80)
 
         try:
+            # First, sync impressions from sheet (reverse sync for manually added data)
+            self._sync_impressions_from_sheet(link)
+
+            # Scrape comments (this navigates to the page)
             comments = self.scrape_reddit_comments(url)
+
+            # Scrape post metrics (upvotes, comment count) - page already loaded
+            metrics = self.scrape_post_metrics(url)
+            logger.info(f"Reddit metrics: upvotes={metrics['upvotes']}, comments={metrics['comments']}")
+
+            # Match comments to members
             matched_comments = self.match_comments_to_members(comments)
 
+            # Write activities to sheet and CSV
             if matched_comments:
                 self.write_comments_to_sheet(matched_comments, url)
+                self.write_activities_to_csv(matched_comments, url)
+
+            # Update stats in CSV and Google Sheet
+            self._update_metrics_csv(url, metrics)
+            self._update_stats_sheet(link, metrics)
 
             return len(matched_comments)
 
