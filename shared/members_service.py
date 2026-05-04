@@ -29,6 +29,25 @@ class MembersDBService:
         except Exception:
             return []
 
+    def _filter_rows_by_month(self, rows: List[Dict], month: str, date_field: str = 'date') -> List[Dict]:
+        """Filter rows by YYYY-MM using a date-like field."""
+        if not month:
+            return rows
+        return [row for row in rows if (row.get(date_field, '') or '').startswith(month)]
+
+    def _activity_username(self, row: Dict, platform: str) -> str:
+        """Return platform-specific username for an activity row."""
+        if platform == 'x':
+            return (row.get('x_handle') or '').strip()
+        return (row.get('reddit_username') or '').strip()
+
+    def _activity_username_label(self, row: Dict, platform: str) -> str:
+        """Return formatted username label for UI display."""
+        username = self._activity_username(row, platform)
+        if not username:
+            return ''
+        return f"@{username}" if platform == 'x' else f"u/{username}"
+
     def get_all_members(self) -> List[Dict]:
         """Get all members from the database."""
         return self._read_csv(self.members_db_path)
@@ -69,6 +88,8 @@ class MembersDBService:
                 t['target_url'] = t['url']
             if 'author' in t and 'created_by' not in t:
                 t['created_by'] = t['author']
+            if 'date' in t and 'created_date' not in t:
+                t['created_date'] = t['date']
             # Default task_type to 'content' for dashboard display
             if 'task_type' not in t:
                 t['task_type'] = 'content'
@@ -76,21 +97,29 @@ class MembersDBService:
             return tasks
         return [t for t in tasks if t.get('year_month', '') == year_month]
 
-    def get_x_activities_by_member(self, discord_user: str) -> List[Dict]:
+    def get_available_task_months(self) -> List[str]:
+        """Return sorted task months in reverse chronological order."""
+        tasks = self.get_tasks_for_month('')
+        months = {t.get('year_month', '').strip() for t in tasks if t.get('year_month', '').strip()}
+        return sorted(months, reverse=True)
+
+    def get_x_activities_by_member(self, discord_user: str, month: str = '') -> List[Dict]:
         """Get X activities for a specific member."""
         if not discord_user:
             return []
         activities = self._read_csv(self.x_activity_path)
         discord_lower = discord_user.lower()
-        return [a for a in activities if (a.get('discord_user') or '').lower() == discord_lower]
+        member_activities = [a for a in activities if (a.get('discord_user') or '').lower() == discord_lower]
+        return self._filter_rows_by_month(member_activities, month)
 
-    def get_reddit_activities_by_member(self, discord_user: str) -> List[Dict]:
+    def get_reddit_activities_by_member(self, discord_user: str, month: str = '') -> List[Dict]:
         """Get Reddit activities for a specific member."""
         if not discord_user:
             return []
         activities = self._read_csv(self.reddit_activity_path)
         discord_lower = discord_user.lower()
-        return [a for a in activities if (a.get('discord_user') or '').lower() == discord_lower]
+        member_activities = [a for a in activities if (a.get('discord_user') or '').lower() == discord_lower]
+        return self._filter_rows_by_month(member_activities, month)
 
     def get_x_activity_urls_for_target(self, target_url: str) -> set:
         """Get set of activity URLs already recorded for a target URL."""
@@ -111,19 +140,17 @@ class MembersDBService:
         # Add platform tag
         for a in x_activities:
             a['platform'] = 'x'
+            a['username'] = self._activity_username(a, 'x')
+            a['username_label'] = self._activity_username_label(a, 'x')
         for a in reddit_activities:
             a['platform'] = 'reddit'
+            a['username'] = self._activity_username(a, 'reddit')
+            a['username_label'] = self._activity_username_label(a, 'reddit')
 
         all_activities = x_activities + reddit_activities
 
         # Filter by month if specified
-        if month:
-            filtered = []
-            for a in all_activities:
-                activity_date = a.get('date', '')
-                if activity_date and activity_date.startswith(month):
-                    filtered.append(a)
-            all_activities = filtered
+        all_activities = self._filter_rows_by_month(all_activities, month)
 
         # Sort by date and time descending
         def sort_key(a):
@@ -133,6 +160,77 @@ class MembersDBService:
 
         all_activities.sort(key=sort_key, reverse=True)
         return all_activities
+
+    def get_available_activity_months(self) -> List[str]:
+        """Return sorted months present in X or Reddit activity logs."""
+        months = set()
+        for activity in self.get_combined_activity_history():
+            activity_date = (activity.get('date') or '').strip()
+            if len(activity_date) >= 7:
+                months.add(activity_date[:7])
+        return sorted(months, reverse=True)
+
+    def get_member_contribution_stats(self, discord_user: str, month: str = '') -> Dict[str, int]:
+        """Return per-member contribution counts, optionally scoped to a month."""
+        x_activities = self.get_x_activities_by_member(discord_user, month)
+        reddit_activities = self.get_reddit_activities_by_member(discord_user, month)
+
+        x_comments = len([a for a in x_activities if a.get('activity_type', '').lower() in ['comment', 'reply']])
+        x_quotes = len([a for a in x_activities if a.get('activity_type', '').lower() == 'quote'])
+        x_retweets = len([a for a in x_activities if a.get('activity_type', '').lower() in ['retweet', 'repost']])
+        reddit_comments = len([a for a in reddit_activities if a.get('activity_type', '').lower() in ['comment', 'reply']])
+
+        return {
+            'x_comments': x_comments,
+            'x_quotes': x_quotes,
+            'x_retweets': x_retweets,
+            'reddit_comments': reddit_comments,
+            'total_contributions': x_comments + x_quotes + x_retweets + reddit_comments,
+        }
+
+    def get_all_member_stats(self, month: str = '') -> Dict[str, Dict[str, int]]:
+        """Read X and Reddit CSVs once, return stats grouped by discord_user (lowercase).
+
+        Replaces the N+1 pattern in the /members route where each member triggered
+        two separate CSV reads. Now it's always exactly 2 reads regardless of member count.
+        """
+        _empty = lambda: {'x_comments': 0, 'x_quotes': 0, 'x_retweets': 0, 'reddit_comments': 0, 'total_contributions': 0}
+
+        x_activities = self._read_csv(self.x_activity_path)
+        reddit_activities = self._read_csv(self.reddit_activity_path)
+
+        if month:
+            x_activities = self._filter_rows_by_month(x_activities, month)
+            reddit_activities = self._filter_rows_by_month(reddit_activities, month)
+
+        stats: Dict[str, Dict[str, int]] = {}
+
+        for a in x_activities:
+            user = (a.get('discord_user') or '').strip().lower()
+            if not user:
+                continue
+            s = stats.setdefault(user, _empty())
+            atype = (a.get('activity_type') or '').lower()
+            if atype in ('comment', 'reply'):
+                s['x_comments'] += 1
+            elif atype == 'quote':
+                s['x_quotes'] += 1
+            elif atype in ('retweet', 'repost'):
+                s['x_retweets'] += 1
+
+        for a in reddit_activities:
+            user = (a.get('discord_user') or '').strip().lower()
+            if not user:
+                continue
+            s = stats.setdefault(user, _empty())
+            atype = (a.get('activity_type') or '').lower()
+            if atype in ('comment', 'reply'):
+                s['reddit_comments'] += 1
+
+        for s in stats.values():
+            s['total_contributions'] = s['x_comments'] + s['x_quotes'] + s['x_retweets'] + s['reddit_comments']
+
+        return stats
 
     # ========== Write Methods ==========
 

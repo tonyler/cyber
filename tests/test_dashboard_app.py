@@ -48,21 +48,14 @@ class FakeMembersService:
         return ["2026-02", "2026-01"]
 
     def get_member_contribution_stats(self, discord_user, month=""):
+        return self.get_all_member_stats(month).get(discord_user.lower(), {
+            "x_comments": 0, "x_quotes": 0, "x_retweets": 0, "reddit_comments": 0, "total_contributions": 0,
+        })
+
+    def get_all_member_stats(self, month=""):
         if month == "2026-01":
-            return {
-                "x_comments": 1,
-                "x_quotes": 0,
-                "x_retweets": 0,
-                "reddit_comments": 2,
-                "total_contributions": 3,
-            }
-        return {
-            "x_comments": 5,
-            "x_quotes": 1,
-            "x_retweets": 1,
-            "reddit_comments": 4,
-            "total_contributions": 11,
-        }
+            return {"alice": {"x_comments": 1, "x_quotes": 0, "x_retweets": 0, "reddit_comments": 2, "total_contributions": 3}}
+        return {"alice": {"x_comments": 5, "x_quotes": 1, "x_retweets": 1, "reddit_comments": 4, "total_contributions": 11}}
 
     def get_combined_activity_history(self, month=""):
         return [
