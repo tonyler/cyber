@@ -15,9 +15,7 @@ Modern, professional dashboard for raid coordination and member activity trackin
 
 1. **Install dependencies** (first time only):
    ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
+   pip install -r ../requirements.txt
    ```
 
 2. **Start the dashboard**:
@@ -41,7 +39,6 @@ Modern, professional dashboard for raid coordination and member activity trackin
 
 - **Dashboard** (`/`) - Overview with key stats and recent activity
 - **Members** (`/members`) - All registered members with profiles
-- **Tasks** (`/tasks`) - Coordinated tasks with month filtering
 - **Activity** (`/activity`) - Complete activity history with platform filters
 
 ## Tech Stack
@@ -63,7 +60,6 @@ Modern, professional dashboard for raid coordination and member activity trackin
 
 - `Alt + H` - Go to Home/Dashboard
 - `Alt + M` - Go to Members
-- `Alt + T` - Go to Tasks
 - `Alt + A` - Go to Activity
 
 ## Portability
