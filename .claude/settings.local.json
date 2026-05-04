@@ -50,7 +50,8 @@
       "Bash(fuser -k 5003/tcp)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(systemctl is-active:*)"
+      "Bash(systemctl is-active:*)",
+      "Bash(git rm:*)"
     ]
   },
   "enabledMcpjsonServers": [

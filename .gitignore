@@ -69,3 +69,4 @@ deploy/
 *.tmp
 *.temp
 cookies.json
+tests/screenshots/
