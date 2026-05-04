@@ -7,88 +7,68 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 LOGS_DIR="$PROJECT_ROOT/logs"
 
-stop_by_pidfile() {
-    local name="$1"
-    local pidfile="$2"
+# Kill all processes matching a pattern AND clean up the pidfile.
+# Usage: kill_service <name> <pidfile> <pgrep-pattern>
+kill_service() {
+    local name="$1" pidfile="$2" pattern="$3"
+    local killed=0
 
-    if [ ! -f "$pidfile" ]; then
-        echo "⚠️  $name PID file not found"
-        return
-    fi
-
-    local pid
-    pid="$(cat "$pidfile" 2>/dev/null || true)"
-    if [ -z "$pid" ]; then
-        echo "⚠️  $name PID file empty"
-        rm -f "$pidfile"
-        return
-    fi
-
-    if ps -p "$pid" > /dev/null 2>&1; then
-        echo "Stopping $name (PID: $pid)..."
-        kill "$pid" || true
-        for _ in {1..10}; do
-            if ps -p "$pid" > /dev/null 2>&1; then
-                sleep 1
-            else
-                break
-            fi
-        done
-        if ps -p "$pid" > /dev/null 2>&1; then
-            echo "⚠️  $name did not stop, sending SIGKILL"
-            kill -9 "$pid" || true
+    # Kill by PID file first
+    if [ -f "$pidfile" ]; then
+        local pid
+        pid="$(cat "$pidfile" 2>/dev/null || true)"
+        if [ -n "$pid" ] && ps -p "$pid" > /dev/null 2>&1; then
+            kill "$pid" 2>/dev/null || true
+            killed=1
         fi
-        echo "✅ $name stopped"
-    else
-        echo "⚠️  $name not running (stale PID file)"
+        rm -f "$pidfile"
     fi
 
-    rm -f "$pidfile"
-}
-
-stop_stray_bot_processes() {
-    local found=0
-    local target_dir="$PROJECT_ROOT/bot"
-    local target_cmd="$PROJECT_ROOT/bot/bot.py"
-
-    for pid in $(pgrep -f "python.*bot.py" 2>/dev/null || true); do
-        local cwd cmd
-        cwd="$(readlink -f "/proc/$pid/cwd" 2>/dev/null || true)"
-        cmd="$(tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null || true)"
-
-        if [ "$cwd" = "$target_dir" ] || [[ "$cmd" == *"$target_cmd"* ]]; then
-            found=1
-            echo "Stopping stray Discord Bot process (PID: $pid)..."
-            kill "$pid" || true
-            for _ in {1..10}; do
-                if ps -p "$pid" > /dev/null 2>&1; then
-                    sleep 1
-                else
-                    break
-                fi
-            done
-            if ps -p "$pid" > /dev/null 2>&1; then
-                echo "⚠️  Stray Discord Bot process did not stop, sending SIGKILL"
-                kill -9 "$pid" || true
-            fi
+    # Kill any remaining processes by pattern (handles orphans & stale PIDs)
+    local pids
+    pids="$(pgrep -f -- "$pattern" 2>/dev/null || true)"
+    for pid in $pids; do
+        if ps -p "$pid" > /dev/null 2>&1; then
+            kill "$pid" 2>/dev/null || true
+            killed=1
         fi
     done
 
-    if [ "$found" -eq 0 ]; then
-        echo "✅ No stray Discord Bot processes found"
+    if [ "$killed" -eq 0 ]; then
+        echo "  $name was not running"
+        return
     fi
+
+    # Wait up to 5s for clean exit
+    local waited=0
+    while [ "$waited" -lt 5 ]; do
+        pids="$(pgrep -f -- "$pattern" 2>/dev/null || true)"
+        [ -z "$pids" ] && break
+        sleep 1
+        waited=$((waited + 1))
+    done
+
+    # Force-kill anything still alive
+    pids="$(pgrep -f -- "$pattern" 2>/dev/null || true)"
+    for pid in $pids; do
+        kill -9 "$pid" 2>/dev/null || true
+    done
+
+    echo "✅ $name stopped"
 }
 
 echo "========================================"
 echo "Stopping Full Cybernetics Stack"
 echo "========================================"
 
-stop_by_pidfile "Sync Daemon" "$LOGS_DIR/sync_daemon.pid"
-stop_by_pidfile "Dashboard" "$LOGS_DIR/dashboard.pid"
-stop_by_pidfile "Discord Bot" "$LOGS_DIR/bot.pid"
-stop_stray_bot_processes
-stop_by_pidfile "Scrapers" "$LOGS_DIR/scrapers.pid"
-stop_by_pidfile "Monthly Views Daemon" "$LOGS_DIR/monthly_views.pid"
+kill_service "Sync Daemon"          "$LOGS_DIR/sync_daemon.pid"    "$PROJECT_ROOT/scripts/sync_worker.py"
+kill_service "Dashboard"            "$LOGS_DIR/dashboard.pid"      "$PROJECT_ROOT/dashboard3/app.py"
+kill_service "Discord Bot"          "$LOGS_DIR/bot.pid"            "python.*bot\.py"
+kill_service "Scrapers"             "$LOGS_DIR/scrapers.pid"       "$PROJECT_ROOT/scripts/scraper_daemon.sh"
+kill_service "Monthly Views Daemon" "$LOGS_DIR/monthly_views.pid"  "$PROJECT_ROOT/scripts/view_snapshot_daemon.sh"
+
+# Clean up legacy pidfile
+rm -f "$PROJECT_ROOT/dashboard3/.dashboard3.pid"
 
 echo ""
 echo "========================================"

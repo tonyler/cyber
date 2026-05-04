@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from 'macros.html' import embed_post, embed_scripts %}
+{% block title %}X Posts — Cybernetics{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+  <div>
+    <div class="flex items-center gap-2 mb-1">
+      <a href="{{ url_for('index') }}" style="font-size:0.72rem;color:var(--tx-lo);text-decoration:none;">← Dashboard</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <h1 class="h-page-title" style="font-size:1.3rem;">X Posts</h1>
+      <span class="h-badge h-badge-cyn">{{ x_posts|length }} posts</span>
+    </div>
+    <p style="font-size:0.74rem;color:var(--tx-dim);margin-top:0.15rem;">All published X content</p>
+  </div>
+  <form method="get" action="{{ url_for('x_posts_page') }}" class="flex items-center gap-2">
+    <select name="month" style="width:auto;text-align:center;">
+      <option value="">All Time</option>
+      {% for month in available_months %}
+      <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="h-btn h-btn-primary h-btn-sm">Apply</button>
+  </form>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4" style="align-items:start;">
+  {% if x_posts %}
+  {% for post in x_posts %}
+  <div class="h-panel flex flex-col gap-2 p-2 md:p-4 h-[420px] md:h-[600px]" style="overflow:hidden;">
+    <div class="flex flex-wrap items-center gap-1 md:gap-2" style="flex-shrink:0;">
+      {% if post.created_by %}
+      <span class="h-badge h-badge-gray" style="font-size:0.55rem;">{{ post.created_by }}</span>
+      {% endif %}
+    </div>
+    <div style="flex:1;min-height:0;">
+      {{ embed_post(post.target_url, 'x', post.display_title or 'View post') }}
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="h-panel py-16 text-center col-span-full">
+    <svg class="w-10 h-10 mx-auto mb-3" fill="currentColor" viewBox="0 0 24 24" style="color:var(--tx-lo);">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+    </svg>
+    <p style="color:var(--tx-dim);font-size:0.84rem;">No X posts for this period.</p>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

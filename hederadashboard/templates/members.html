@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Members — Cybernetics{% endblock %}
+
+{% block content %}
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+  <div>
+    <h1 class="h-page-title">Members</h1>
+    <p style="font-size:0.82rem;color:var(--tx-dim);margin-top:0.3rem;">
+      Contributions for <span style="color:var(--ind-text);font-weight:600;">{{ selected_scope_label }}</span>
+    </p>
+  </div>
+  <div class="flex flex-col sm:flex-row gap-3">
+    <form method="get" class="flex items-center gap-2">
+      <select name="month" style="width:auto;">
+        <option value="" {% if not selected_month %}selected{% endif %}>All Time</option>
+        {% for month in available_months %}
+        <option value="{{ month }}" {% if month == selected_month %}selected{% endif %}>{{ month }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="h-btn h-btn-primary h-btn-sm">Apply</button>
+    </form>
+    <div class="relative">
+      <input type="text" id="memberSearch" placeholder="Search members…"
+             style="padding-left:2.2rem;font-size:0.82rem;">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+           fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--tx-dim);">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+{% if members %}
+<div id="membersGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+  {% for member in members %}
+  <div class="h-member-card" data-name="{{ member.discord_user|lower }}" data-status="{{ member.status|lower }}">
+
+    <!-- Top strip by status -->
+    <div style="position:absolute;top:0;left:0;right:0;height:2px;border-radius:12px 12px 0 0;
+      background:{% if member.status == 'active' %}linear-gradient(90deg,var(--ind),var(--vio))
+                 {% elif member.status == 'inactive' %}rgba(239,68,68,0.4)
+                 {% else %}rgba(255,255,255,0.06){% endif %};"></div>
+
+    <!-- Avatar + name -->
+    <div class="flex items-center gap-3 mb-4">
+      <div style="width:44px;height:44px;border-radius:10px;overflow:hidden;border:1px solid var(--b-mid);flex-shrink:0;position:relative;">
+        <div style="position:absolute;inset:0;background:linear-gradient(135deg,var(--ind-mid),var(--vio-mid));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.1rem;color:var(--ind-text);">
+          {{ member.discord_user[0]|upper if member.discord_user else '?' }}
+        </div>
+        {% set _handle = member.x_handle | replace('@','') if member.x_handle else '' %}
+        {% if _handle and '<' not in _handle and ' ' not in _handle and 'http' not in _handle %}
+        <img src="https://unavatar.io/x/{{ _handle }}" alt="{{ member.discord_user }}"
+             loading="lazy"
+             style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" onerror="this.remove();">
+        {% endif %}
+      </div>
+      <div class="min-w-0 flex-1">
+        <h3 style="font-size:0.9rem;font-weight:700;color:var(--tx-max);margin:0 0 0.3rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+            title="{{ member.discord_user or 'Unknown' }}">
+          {{ member.discord_user or 'Unknown' }}
+        </h3>
+        <span class="h-badge {% if member.status == 'active' %}h-badge-grn{% elif member.status == 'inactive' %}h-badge-red{% else %}h-badge-gray{% endif %}">
+          {{ member.status|title or 'Unknown' }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Social links -->
+    <div class="flex flex-col gap-1.5 mb-4">
+      {% if member.x_handle %}
+      <a href="https://x.com/{{ member.x_handle }}" target="_blank"
+         style="display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;color:var(--tx-dim);text-decoration:none;transition:color 0.2s;"
+         onmouseover="this.style.color='var(--cyn-text)'" onmouseout="this.style.color='var(--tx-dim)'">
+        <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+        </svg>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@{{ member.x_handle }}</span>
+      </a>
+      {% endif %}
+
+      {% set reddit_user = member.reddit_username or (member.reddit_profile_url | replace('https://www.reddit.com/user/', '') | replace('https://reddit.com/user/', '') | replace('https://reddit.com/u/', '') if member.reddit_profile_url else '') %}
+      {% set reddit_url = member.reddit_profile_url or ('https://reddit.com/user/' + reddit_user if reddit_user else '') %}
+      {% if reddit_user and reddit_url %}
+      <a href="{{ reddit_url }}" target="_blank"
+         style="display:flex;align-items:center;gap:0.4rem;font-size:0.78rem;color:var(--tx-dim);text-decoration:none;transition:color 0.2s;"
+         onmouseover="this.style.color='var(--pnk-text)'" onmouseout="this.style.color='var(--tx-dim)'">
+        <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+        </svg>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">u/{{ reddit_user }}</span>
+      </a>
+      {% endif %}
+    </div>
+
+    <!-- Stats grid -->
+    <div class="grid grid-cols-2 gap-2" style="padding-top:0.75rem;border-top:1px solid var(--b-dim);">
+      <div class="text-center" style="padding:0.5rem;background:var(--cyn-dim);border-radius:6px;border:1px solid var(--cyn-border);">
+        <div class="h-data" style="font-size:1.1rem;font-weight:700;color:var(--cyn-text);">{{ member.x_comments or 0 }}</div>
+        <div class="h-section-label">X Replies</div>
+      </div>
+      <div class="text-center" style="padding:0.5rem;background:var(--ind-dim);border-radius:6px;border:1px solid var(--ind-border);">
+        <div class="h-data" style="font-size:1.1rem;font-weight:700;color:var(--ind-text);">{{ member.x_quotes or 0 }}</div>
+        <div class="h-section-label">X Quotes</div>
+      </div>
+      <div class="text-center" style="padding:0.5rem;background:var(--vio-dim);border-radius:6px;border:1px solid var(--vio-border);">
+        <div class="h-data" style="font-size:1.1rem;font-weight:700;color:var(--vio-text);">{{ member.x_retweets or 0 }}</div>
+        <div class="h-section-label">Reposts</div>
+      </div>
+      <div class="text-center" style="padding:0.5rem;background:var(--pnk-dim);border-radius:6px;border:1px solid var(--pnk-border);">
+        <div class="h-data" style="font-size:1.1rem;font-weight:700;color:var(--pnk-text);">{{ member.reddit_comments or 0 }}</div>
+        <div class="h-section-label">Reddit</div>
+      </div>
+    </div>
+
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="h-panel p-14 text-center">
+  <p class="h-section-label" style="text-transform:none;color:var(--tx-dim);">No members yet. They will appear once registered.</p>
+</div>
+{% endif %}
+
+{% endblock %}

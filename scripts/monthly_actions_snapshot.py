@@ -103,6 +103,11 @@ def _previous_total(rows: Iterable[dict[str, str]], today: str) -> int:
     return total
 
 
+def _activity_files_exist() -> bool:
+    """Return True if at least one activity log file exists (scraper has run at some point)."""
+    return any(path.exists() for path, _ in ACTIVITY_FILES)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
     today_obj = date.today()
@@ -111,6 +116,16 @@ def main() -> None:
 
     # Get activity counts by actual activity date (not snapshot date)
     counts = _aggregate_actions(month_key)
+
+    # Freshness guard: if activity log files exist but have zero rows for this month,
+    # the scraper is likely broken — skip rather than write a misleading empty snapshot.
+    if not counts and _activity_files_exist():
+        LOG.warning(
+            "STALE DATA: Activity log files exist but have zero rows for %s. "
+            "Scraper may be broken. Skipping snapshot to avoid misleading zeros.",
+            month_key,
+        )
+        return
 
     # Build rows from actual per-day activity counts
     rows: List[dict[str, str]] = []

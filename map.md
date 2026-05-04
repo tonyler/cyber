@@ -1,0 +1,150 @@
+# Repo Map
+
+This repo is a CSV-backed Discord + scraper + Flask dashboard stack.
+
+Main flow:
+`Discord bot -> Google Sheets members -> local CSV cache -> scrapers enrich links/activity -> dashboard reads CSVs -> snapshot jobs roll up monthly stats`
+
+## Root files
+
+- `README.md` - top-level project overview; partly stale because it still talks about `bot/requirements.txt`.
+- `CLAUDE.md` - AI/agent working notes, not runtime code.
+- `requirements.txt` - shared Python dependencies for bot, scrapers, dashboard, and tests.
+- `pytest.ini` - pytest discovery config for the `tests/` directory.
+- `tofix.md` - earlier handoff notes about scraper breakage and stale KPI data.
+
+## bot/
+
+- `bot/bot.py` - Discord bot; auto-detects X/Reddit links in a channel, writes `database/links.csv`, and handles `/register` into Google Sheets.
+- `bot/start.sh` - starts the bot using the root virtualenv and root `requirements.txt`.
+
+## dashboard3/
+
+- `dashboard3/app.py` - Flask dashboard entrypoint; handles login, members, activity, monthly charts, and scraper health banners.
+- `dashboard3/discord_auth.py` - Discord OAuth, role check, and file-backed session storage.
+- `dashboard3/start.sh` - safer dashboard launcher; prefers repo venv and writes logs.
+- `dashboard3/stop.sh` - stops the dashboard by PID or process match.
+- `dashboard3/status.sh` - prints dashboard PID, URL, and recent log lines.
+- `dashboard3/run.sh` - quick local runner using plain `python3`; more fragile than `start.sh`.
+- `dashboard3/README.md` - dashboard setup guide; stale in a few places because it mentions pages/routes that no longer exist.
+- `dashboard3/STRUCTURE.md` - dashboard structure doc; stale because it references missing files like `dashboard3/requirements.txt` and `templates/tasks.html`.
+- `dashboard3/FEATURES.md` - feature/design marketing doc; useful for intent, not source of truth.
+- `dashboard3/data/sessions.json` - runtime session store for OAuth logins.
+- `dashboard3/templates/base.html` - shared layout, nav, auth chrome, and shared UI shell.
+- `dashboard3/templates/landing.html` - unauthenticated login page.
+- `dashboard3/templates/index.html` - main dashboard page for current-month posts and monthly progress charts.
+- `dashboard3/templates/members.html` - members directory page with per-member activity counts.
+- `dashboard3/templates/activity.html` - combined activity history page.
+- `dashboard3/static/css/style.css` - dashboard styling.
+- `dashboard3/static/js/main.js` - dashboard client-side interactions.
+- `dashboard3/static/images/preview.png` - preview asset/image for the dashboard.
+
+## scrapers/
+
+- `scrapers/run_scrapers.py` - CLI entrypoint for running X and/or Reddit scrapers.
+- `scrapers/base_scraper.py` - shared Playwright setup, URL matching, count parsing, member loading, and CSV update helpers.
+- `scrapers/x_scraper.py` - X/Twitter scraper for post metrics plus replies/quotes/reposts activity extraction.
+- `scrapers/reddit_scraper.py` - Reddit scraper for post metrics and comment extraction.
+- `scrapers/sheet_stats_updater.py` - writes scraped stats back into Google Sheets tabs.
+- `scrapers/MOBILE_SCRAPER_GUIDE.md` - notes for the mobile-browser scraping approach and session handling.
+
+## scripts/
+
+- `scripts/start_all.sh` - starts dashboard, sync worker, bot, scraper daemon, and monthly snapshot daemon together.
+- `scripts/stop_all.sh` - stops the whole stack.
+- `scripts/status.sh` - reports process status for the stack.
+- `scripts/start_cybernetics.sh` - starts the dashboard plus sync worker only.
+- `scripts/scraper_daemon.sh` - runs `scrapers/run_scrapers.py` on a fixed interval.
+- `scripts/sync_worker.py` - syncs members/links/activity between CSVs and Google Sheets.
+- `scripts/monthly_views_snapshot.py` - rolls `links.csv` impressions into daily monthly view snapshots.
+- `scripts/monthly_actions_snapshot.py` - rolls activity logs into daily monthly action snapshots.
+- `scripts/view_snapshot_daemon.sh` - runs the monthly snapshot scripts once per UTC day.
+- `scripts/setup_nginx.sh` - root-only nginx reverse-proxy setup script.
+
+## shared/
+
+- `shared/config.py` - central env/path accessors.
+- `shared/logger_config.py` - shared logger setup with console + rotating file logs.
+- `shared/links_service.py` - read-only CSV service for `links.csv`.
+- `shared/members_service.py` - CSV service for members, tasks, and activity logs; also has write/upsert helpers.
+- `shared/sheets_members_service.py` - Google Sheets member upsert service used by the Discord bot.
+- `shared/members_sheets_parser.py` - parser that converts raw sheet rows into normalized member/task/activity dicts.
+- `shared/config/sync_config.json` - sync behavior config like interval and month-tab format.
+
+## database/
+
+- `database/members.csv` - local member cache.
+- `database/links.csv` - canonical local content/task list plus scraped post metrics.
+- `database/x_activity_log.csv` - X activity log generated by the scraper.
+- `database/monthly_views/2026-01-views.csv` - January 2026 daily total-views snapshot.
+- `database/monthly_views/2026-02-views.csv` - February 2026 daily total-views snapshot.
+- `database/monthly_views/2026-03-views.csv` - March 2026 daily total-views snapshot.
+- `database/monthly_views/2026-04-views.csv` - April 2026 daily total-views snapshot.
+- `database/monthly_actions/2026-01-actions.csv` - January 2026 daily actions snapshot.
+- `database/monthly_actions/2026-02-actions.csv` - February 2026 daily actions snapshot.
+- `database/monthly_actions/2026-03-actions.csv` - March 2026 daily actions snapshot.
+- `database/monthly_actions/2026-04-actions.csv` - April 2026 daily actions snapshot.
+
+## tests/
+
+- `tests/conftest.py` - adds `shared/`, `scrapers/`, `scripts/`, and `tests/` to `sys.path` for pytest.
+- `tests/helpers.py` - CSV test helpers and common field lists.
+- `tests/__init__.py` - package marker.
+- `tests/test_base_scraper.py` - unit tests for shared scraper helpers.
+- `tests/test_x_scraper.py` - unit tests for X scraper pure logic.
+- `tests/test_reddit_scraper.py` - unit tests for Reddit scraper pure logic.
+- `tests/test_members_service.py` - unit tests for CSV members/activity service.
+- `tests/test_links_service.py` - unit tests for links CSV service.
+- `tests/test_config.py` - unit tests for env/config loading.
+- `tests/test_monthly_snapshots.py` - unit tests for monthly rollup scripts.
+- `tests/test_live_scraper.py` - manual Playwright integration script, but currently misnamed/misplaced for pytest.
+
+## Likely disposable or stale files
+
+- `dashboard3/data/sessions.json` - runtime state, not real source code; should be treated like generated data.
+- `tests/test_live_scraper.py` - useful as a manual script, but harmful as a pytest-collected test file in its current form.
+- `dashboard3/STRUCTURE.md` - stale enough to mislead maintainers.
+- `dashboard3/FEATURES.md` - mostly presentation text; low operational value.
+- Parts of `README.md` and `dashboard3/README.md` - stale references to deleted or missing files/routes.
+- Generated/runtime directories not listed above but safe to treat as disposable: `__pycache__/`, `.pytest_cache/`, `logs/`, `tests/screenshots/`, PID files, transient CSV lock/tmp files.
+
+## Things that look risky or already broken
+
+- X live scraping is currently failing.
+  The live run redirected all 3 tested X URLs to `https://x.com/account/access`, found 0 `article` elements, and saved failure screenshots under `tests/screenshots/`.
+
+- Reddit live scraping is also effectively failing.
+  The live run found 0 `.comment` elements and 0 `[data-testid="comment"]` elements on all 3 tested Reddit URLs.
+
+- The live test script gives misleading pass/fail output for Reddit.
+  It marked Reddit as `3 passed, 0 failed` even though all 3 URLs reported “No comment elements found”; the script treats “returned a dict” as success.
+
+- Full pytest is not green.
+  `./venv/bin/pytest` ends with `164 passed, 3 errors` because `tests/test_live_scraper.py` is collected as pytest tests but expects manual script arguments/fixtures (`page`, `url`, `idx`, `metrics`).
+
+- X production data appears stale.
+  `database/x_activity_log.csv` currently ends on `2026-02-05`, and `links.csv` has:
+  `2026-01 rows=66 nonzero_impressions=53`
+  `2026-02 rows=117 nonzero_impressions=33`
+  `2026-03 rows=68 nonzero_impressions=0`
+  `2026-04 rows=76 nonzero_impressions=0`
+
+- Reddit production data appears missing.
+  `database/reddit_activity_log.csv` does not exist at all.
+
+- `dashboard3/run.sh` can break on machines where plain `python3` is not the repo venv.
+  `dashboard3/start.sh` is the safer launcher.
+
+- `dashboard3/discord_auth.py` stores sessions in a local JSON file.
+  That is simple, but it is brittle under multi-process deployment and easy to lose/corrupt.
+
+- `shared/members_service.py` and `shared/links_service.py` swallow CSV read errors and return empty data.
+  That avoids crashes, but it can hide corruption and make failures look like “no activity”.
+
+## Tests I ran
+
+- `./venv/bin/pytest tests/test_base_scraper.py tests/test_x_scraper.py tests/test_reddit_scraper.py` -> `67 passed`
+- `./venv/bin/pytest tests/test_monthly_snapshots.py` -> `34 passed`
+- `./venv/bin/pytest tests/test_members_service.py tests/test_links_service.py tests/test_config.py` -> `63 passed`
+- `./venv/bin/pytest` -> `164 passed, 3 errors` because of `tests/test_live_scraper.py`
+- `timeout 45 ./venv/bin/python tests/test_live_scraper.py` -> browser launched outside sandbox, X failed 3/3, Reddit found 0 comments on 3/3

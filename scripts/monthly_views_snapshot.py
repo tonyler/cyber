@@ -112,14 +112,31 @@ def _previous_total(rows: Iterable[dict[str, str]], today: str) -> int:
     return total
 
 
+def _links_exist_for_month(month_key: str, rows: Iterable[dict[str, str]]) -> int:
+    """Count how many links exist for this month (regardless of impressions)."""
+    return sum(1 for row in rows if _row_to_month(row) == month_key)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(levelname)s] %(message)s")
     today = date.today()
     month_key = today.strftime("%Y-%m")
     snapshot_file = VIEWS_DIR / f"{month_key}-views.csv"
 
-    tasks = _load_tasks()
+    tasks = list(_load_tasks())
     total_views = _monthly_total(month_key, tasks)
+
+    # Freshness guard: if links exist for this month but all have zero impressions,
+    # the scraper is likely broken — don't write a misleading zero snapshot.
+    if total_views == 0:
+        links_count = _links_exist_for_month(month_key, tasks)
+        if links_count > 0:
+            LOG.warning(
+                "STALE DATA: %d links exist for %s but all impressions are zero. "
+                "Scraper may be broken. Skipping snapshot to avoid misleading zeros.",
+                links_count, month_key,
+            )
+            return
 
     rows = _load_snapshot(snapshot_file)
     previous_total = _previous_total(rows, today.strftime("%Y-%m-%d"))

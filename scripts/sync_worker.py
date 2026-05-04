@@ -263,38 +263,70 @@ def backup_links_to_sheets(gc, tasks_sheet_id: str) -> int:
 # (Scraper writes to CSV, sync backs up to Sheets)
 # ============================================================
 
+def _backup_platform_activities(spreadsheet, csv_path: Path, headers: list, col_range: str, rows_by_month: dict, platform: str) -> int:
+    """Generic helper: backup one platform's activity CSV to its monthly sheet columns."""
+    total_synced = 0
+    for tab_name, tab_rows in rows_by_month.items():
+        try:
+            try:
+                worksheet = spreadsheet.worksheet(tab_name)
+            except Exception:
+                worksheet = spreadsheet.add_worksheet(title=tab_name, rows=2000, cols=26)
+
+            existing_data = worksheet.get_all_values()
+            if not existing_data:
+                # Write headers at the correct column position
+                start_col = col_range.split(':')[0]
+                worksheet.update(values=[headers], range_name=f'{start_col}1')
+
+            # Deduplicate by activity_url (col index 5 within the row for X, same for Reddit)
+            url_col_idx = headers.index('activity_url') if 'activity_url' in headers else 5
+            existing_urls = set()
+            for sheet_row in existing_data[1:]:  # skip header
+                if len(sheet_row) > url_col_idx:
+                    existing_urls.add(sheet_row[url_col_idx].strip())
+
+            appends = []
+            for r in tab_rows:
+                activity_url = r.get('activity_url', '')
+                if not activity_url or activity_url in existing_urls:
+                    continue
+                row_data = [r.get(h, '') for h in headers]
+                appends.append(row_data)
+                existing_urls.add(activity_url)
+
+            if appends:
+                worksheet.append_rows(appends, value_input_option='RAW')
+
+            logger.info(f"[CSV→Sheets] Backed up {platform} activities to {tab_name}: {len(appends)} added")
+            total_synced += len(appends)
+
+        except Exception as e:
+            logger.warning(f"Failed to backup {platform} activities to {tab_name}: {e}")
+
+    return total_synced
+
+
 def backup_activities_to_sheets(gc, activity_sheet_id: str) -> int:
     """Backup activities FROM local CSV TO Google Sheets.
 
     Direction: CSV → Sheets
     Reason: Scraper writes to CSV (source of truth), Sheets is backup
+    Backs up both X (columns A-I) and Reddit (columns M-W) activity logs.
     """
-    csv_path = project_root / "database" / "x_activity_log.csv"
-    rows = _read_csv(csv_path)
-
-    if not rows:
-        return 0
-
-    headers = ['date', 'time', 'discord_user', 'x_handle', 'activity_type',
-               'activity_url', 'target_url', 'task_id', 'notes']
-
-    rows_by_month = defaultdict(list)
-    for r in rows:
-        date_str = r.get('date', '')
-        if date_str and len(date_str) >= 7:
-            ym = date_str[:7]
-            try:
-                dt = datetime.strptime(ym, "%Y-%m")
-                if month_tab_format == "MM/YYYY":
-                    tab = dt.strftime("%m/%Y")
-                else:
-                    tab = dt.strftime("%m/%y")
-                rows_by_month[tab].append(r)
-            except Exception:
-                pass
-
-    if not rows_by_month:
-        return 0
+    def _rows_by_tab(rows):
+        result = defaultdict(list)
+        for r in rows:
+            date_str = r.get('date', '')
+            if date_str and len(date_str) >= 7:
+                ym = date_str[:7]
+                try:
+                    dt = datetime.strptime(ym, "%Y-%m")
+                    tab = dt.strftime("%m/%Y") if month_tab_format == "MM/YYYY" else dt.strftime("%m/%y")
+                    result[tab].append(r)
+                except Exception:
+                    pass
+        return result
 
     try:
         spreadsheet = gc.open_by_key(activity_sheet_id)
@@ -304,59 +336,29 @@ def backup_activities_to_sheets(gc, activity_sheet_id: str) -> int:
 
     total_synced = 0
 
-    for tab_name, tab_rows in rows_by_month.items():
-        try:
-            try:
-                worksheet = spreadsheet.worksheet(tab_name)
-            except Exception:
-                worksheet = spreadsheet.add_worksheet(title=tab_name, rows=2000, cols=len(headers))
-                worksheet.update(values=[headers], range_name='A1')
+    # --- X activity (columns A-I) ---
+    x_csv = project_root / "database" / "x_activity_log.csv"
+    x_rows = _read_csv(x_csv)
+    if x_rows:
+        x_headers = ['date', 'time', 'discord_user', 'x_handle', 'activity_type',
+                     'activity_url', 'target_url', 'task_id', 'notes']
+        total_synced += _backup_platform_activities(
+            spreadsheet, x_csv, x_headers, 'A:I', _rows_by_tab(x_rows), 'X'
+        )
+    else:
+        logger.info("[CSV→Sheets] No X activity rows to backup")
 
-            existing_data = worksheet.get_all_values()
-            if not existing_data:
-                worksheet.update(values=[headers], range_name='A1')
-
-            existing = _get_sheet_data_as_dict(worksheet, key_column=5)
-
-            updates = []
-            appends = []
-
-            for r in tab_rows:
-                activity_url = r.get('activity_url', '')
-                if not activity_url:
-                    continue
-
-                row_data = [
-                    r.get('date', ''),
-                    r.get('time', ''),
-                    r.get('discord_user', ''),
-                    r.get('x_handle', ''),
-                    r.get('activity_type', ''),
-                    activity_url,
-                    r.get('target_url', ''),
-                    r.get('task_id', ''),
-                    r.get('notes', ''),
-                ]
-
-                if activity_url in existing:
-                    row_idx = existing[activity_url]['row_idx']
-                    updates.append({'range': f'A{row_idx}:I{row_idx}', 'values': [row_data]})
-                else:
-                    appends.append(row_data)
-
-            if updates:
-                for start in range(0, len(updates), 500):
-                    batch = updates[start:start + 500]
-                    worksheet.batch_update(batch, value_input_option='RAW')
-
-            if appends:
-                worksheet.append_rows(appends, value_input_option='RAW')
-
-            logger.info(f"[CSV→Sheets] Backed up activities to {tab_name}: {len(updates)} updated, {len(appends)} added")
-            total_synced += len(updates) + len(appends)
-
-        except Exception as e:
-            logger.warning(f"Failed to backup activities to {tab_name}: {e}")
+    # --- Reddit activity (columns M-W) ---
+    reddit_csv = project_root / "database" / "reddit_activity_log.csv"
+    reddit_rows = _read_csv(reddit_csv)
+    if reddit_rows:
+        reddit_headers = ['date', 'time', 'discord_user', 'reddit_username', 'activity_type',
+                          'activity_url', 'target_url', 'task_id', 'notes']
+        total_synced += _backup_platform_activities(
+            spreadsheet, reddit_csv, reddit_headers, 'M:W', _rows_by_tab(reddit_rows), 'Reddit'
+        )
+    else:
+        logger.info("[CSV→Sheets] No Reddit activity rows to backup")
 
     return total_synced
 

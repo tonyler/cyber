@@ -71,4 +71,34 @@ def activity_sheet_id() -> str:
 
 def flask_secret_key() -> str:
     """Get Flask secret key with dev fallback."""
-    return get_env("SECRET_KEY", "dev-secret-change-in-production")
+    key = get_env("SECRET_KEY")
+    if not key:
+        import warnings
+        warnings.warn("SECRET_KEY not set - using insecure default for dev only!")
+        return "dev-secret-change-in-production-" + str(hash(PROJECT_ROOT))
+    return key
+
+
+def discord_client_id() -> str:
+    """Get Discord OAuth2 client ID (same as bot application ID)."""
+    return get_env("DISCORD_CLIENT_ID", "1449101385760243752")
+
+
+def discord_client_secret() -> str:
+    """Get Discord OAuth2 client secret."""
+    return get_env("DISCORD_CLIENT_SECRET")
+
+
+def discord_redirect_uri() -> str:
+    """Get Discord OAuth2 redirect URI."""
+    return get_env("DISCORD_REDIRECT_URI", "http://localhost:5002/callback")
+
+
+def reddit_client_id() -> str:
+    """Get Reddit API client ID (from reddit.com/prefs/apps)."""
+    return get_env("REDDIT_CLIENT_ID")
+
+
+def reddit_client_secret() -> str:
+    """Get Reddit API client secret."""
+    return get_env("REDDIT_CLIENT_SECRET")

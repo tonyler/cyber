@@ -68,3 +68,4 @@ deploy/
 # Temporary files
 *.tmp
 *.temp
+cookies.json

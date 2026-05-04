@@ -8,8 +8,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
 project_root = Path(__file__).parent.parent
-dashboard_dir = project_root / "dashboard"
-sys.path.insert(0, str(dashboard_dir))
+sys.path.insert(0, str(project_root / "shared"))
 
 from logger_config import setup_logger
 

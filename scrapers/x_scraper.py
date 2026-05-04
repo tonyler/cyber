@@ -26,7 +26,11 @@ class XScraper(BaseScraper):
         if session_file:
             self.session_file = session_file
         else:
-            self.session_file = str(Path(__file__).parent.parent / "shared" / "x_session.json")
+            # Check cookies.json at project root first, then fall back to shared/x_session.json
+            project_root = Path(__file__).parent.parent
+            cookies_json = project_root / "cookies.json"
+            x_session = project_root / "shared" / "x_session.json"
+            self.session_file = str(cookies_json if cookies_json.exists() else x_session)
         self._init_sheets_service()
         if self.stats_sheet_id and self.sheet_config:
             self.stats_updater = SheetStatsUpdater(
@@ -54,9 +58,23 @@ class XScraper(BaseScraper):
             logger.error(f"Failed to read X session file: {e}", exc_info=True)
             return
 
-        cookies = session_data.get('cookies', [])
+        # Support both raw array format (browser export) and wrapped {"cookies": [...]}
+        if isinstance(session_data, list):
+            cookies = session_data
+        else:
+            cookies = session_data.get('cookies', [])
         if not isinstance(cookies, list) or not cookies:
             logger.warning("X session file has no cookies to load")
+            return
+
+        # Filter to only X/Twitter-related cookies to avoid navigating unrelated domains
+        X_DOMAINS = {'x.com', 'twitter.com', 'api.x.com', 'upload.x.com'}
+        cookies = [
+            c for c in cookies
+            if c.get('domain', '').lstrip('.') in X_DOMAINS
+        ]
+        if not cookies:
+            logger.warning("No X/Twitter cookies found in session file")
             return
 
         # Group cookies by domain
@@ -181,15 +199,25 @@ class XScraper(BaseScraper):
         now = datetime.now()
         return now.strftime('%Y-%m-%d'), now.strftime('%H:%M:%S')
 
-    def _get_current_month_tab(self) -> str:
-        """Get current month tab name based on config format (e.g., '01/26')"""
-        now = datetime.now()
-        month_tab_format = self.sheet_config.get('sync', {}).get('month_tab_format', 'MM/YY')
-
-        if month_tab_format == 'MM/YYYY':
-            return now.strftime('%m/%Y')
-        else:  # Default to MM/YY
-            return now.strftime('%m/%y')
+    def _detect_page_state(self) -> str:
+        """Classify the current X page state. Returns 'ok', 'login_wall', 'rate_limit', or 'unknown'."""
+        try:
+            url = self.page.url
+            # Login/signup redirect
+            if '/login' in url or '/i/flow/login' in url or '/i/flow/signup' in url:
+                return 'login_wall'
+            # Check for login wall elements in DOM
+            if self.page.locator('input[name="session[username_or_email]"]').count() > 0:
+                return 'login_wall'
+            if self.page.locator('a[href="/login"]').count() > 3:
+                return 'login_wall'
+            # Rate limit: X shows a specific message
+            body = self.page.locator('body').text_content() or ''
+            if 'rate limit' in body.lower() or 'too many requests' in body.lower():
+                return 'rate_limit'
+            return 'ok'
+        except Exception:
+            return 'unknown'
 
     def _click_show_more_replies(self):
         """Click 'Show' buttons to reveal hidden/spam replies"""
@@ -334,6 +362,11 @@ class XScraper(BaseScraper):
         try:
             self._safe_get(tweet_url)
             time.sleep(3)
+
+            state = self._detect_page_state()
+            if state != 'ok':
+                logger.warning(f"X page state '{state}' on {tweet_url}; skipping replies.")
+                return replies
 
             # Click "Show" buttons for hidden/spam replies
             self._click_show_more_replies()
@@ -563,73 +596,51 @@ class XScraper(BaseScraper):
                 logger.warning(f"No tweet article found on {tweet_url}")
                 return metrics
 
-            # Search for interaction buttons AND view count within the tweet article
-            # These elements have aria-label attributes with counts
-            elements = tweet_article.locator('[aria-label]').all()
+            # --- Step 1: extract views from the summary div first ---
+            # X renders a combined summary: "1 reply, 31 likes, 55 views"
+            # This MUST be parsed before the button loop because the button loop's
+            # 'repl' branch would otherwise consume this element and skip views.
+            try:
+                summary_els = tweet_article.locator('div[aria-label*="views"]').all()
+                for sel in summary_els:
+                    label = sel.get_attribute('aria-label') or ''
+                    m = re.search(r'([\d,]+(?:\.\d+)?[KMBkmb]?)\s*views?', label, re.IGNORECASE)
+                    if m:
+                        metrics['impressions'] = self.parse_count(m.group(1).replace(',', ''))
+                        logger.debug(f"Views from summary div: {metrics['impressions']}")
+                        break
+            except Exception as e:
+                logger.debug(f"Error reading summary div for views: {e}")
 
-            for element in elements:
-                try:
-                    label = element.get_attribute('aria-label') or ''
-                    if not label:
-                        continue
-
-                    # Parse metrics from aria-labels
-                    # Format examples: "5 Replies", "10 Reposts", "100 Likes", "1.2K Views"
-                    label_lower = label.lower()
-
-                    if 'repl' in label_lower and metrics['comments'] is None:
-                        metrics['comments'] = self.parse_count(label)
-                    elif 'like' in label_lower and metrics['likes'] is None:
-                        metrics['likes'] = self.parse_count(label)
-                    elif 'view' in label_lower and metrics['impressions'] is None:
-                        metrics['impressions'] = self.parse_count(label)
-                    elif 'quote' in label_lower and metrics['quotes'] is None:
-                        metrics['quotes'] = self.parse_count(label)
-                    elif ('repost' in label_lower or 'retweet' in label_lower) and metrics['reposts'] is None:
-                        metrics['reposts'] = self.parse_count(label)
-
-                except Exception as e:
-                    logger.debug(f"Error parsing aria-label '{label}': {str(e)}")
+            # --- Step 2: extract individual metrics via data-testid buttons ---
+            # Format: "1 Reply. Reply", "0 reposts. Repost", "31 Likes. Like"
+            testid_map = [
+                ('reply',   'comments'),
+                ('retweet', 'reposts'),
+                ('like',    'likes'),
+            ]
+            for testid, metric_key in testid_map:
+                if metrics[metric_key] is not None:
                     continue
-
-            # Additional attempts for views on mobile
-            if metrics['impressions'] is None:
                 try:
-                    # Look for analytics link or view count elements
-                    view_elements = tweet_article.locator('a[href*="/analytics"], span[data-testid*="views"]').all()
-                    for elem in view_elements:
-                        text = elem.text_content()
-                        if text and ('view' in text.lower() or 'k' in text.lower() or 'm' in text.lower()):
-                            count = self.parse_count(text)
-                            if count > 0:
-                                metrics['impressions'] = count
-                                break
-                except Exception:
-                    pass
-
-            # Mobile-specific: look for view count in text content
-            if metrics['impressions'] is None:
-                try:
-                    # Search all text nodes for view count pattern
-                    all_text_elements = tweet_article.locator('*').all()
-                    for elem in all_text_elements:
-                        try:
-                            text = elem.text_content() or ''
-                            # Match patterns like "1.2K Views", "Views 1.2K", or just numbers with K/M
-                            if 'view' in text.lower():
-                                # Extract number before or after "views"
-                                match = re.search(r'([\d,.]+[KMB]?)\s*views?|views?\s*([\d,.]+[KMB]?)', text, re.IGNORECASE)
-                                if match:
-                                    count_str = match.group(1) or match.group(2)
-                                    count = self.parse_count(count_str)
-                                    if count > 0:
-                                        metrics['impressions'] = count
-                                        logger.debug(f"Found views in text: {text} -> {count}")
-                                        break
-                        except Exception:
-                            continue
+                    btn = tweet_article.locator(f'button[data-testid="{testid}"]').first
+                    if btn.count() > 0:
+                        label = btn.get_attribute('aria-label') or ''
+                        metrics[metric_key] = self.parse_count(label)
                 except Exception as e:
-                    logger.debug(f"Error searching for mobile view count: {e}")
+                    logger.debug(f"Error reading {testid} button: {e}")
+
+            # --- Step 3: quotes button (less common testid) ---
+            if metrics['quotes'] is None:
+                try:
+                    for label_text in ['quote', 'Quote']:
+                        btn = tweet_article.locator(f'button[aria-label*="{label_text}"]').first
+                        if btn.count() > 0:
+                            label = btn.get_attribute('aria-label') or ''
+                            metrics['quotes'] = self.parse_count(label)
+                            break
+                except Exception as e:
+                    logger.debug(f"Error reading quotes button: {e}")
 
             metric_values = [
                 metrics.get('impressions'),
@@ -737,55 +748,13 @@ class XScraper(BaseScraper):
         """Update metrics (impressions, likes, comments, retweets) in links.csv."""
         if not target_url or not metrics:
             return
-
-        csv_path = Path(__file__).parent.parent / "database" / "links.csv"
-        if not csv_path.exists():
-            logger.warning(f"links.csv not found at {csv_path}")
-            return
-
-        try:
-            with csv_path.open('r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                fieldnames = reader.fieldnames or []
-                rows = list(reader)
-        except Exception as e:
-            logger.warning(f"Failed to read links.csv: {e}")
-            return
-
-        normalized_target = self._normalize_x_url(target_url)
-        updated = False
-        for row in rows:
-            row_url = self._normalize_x_url(row.get('url') or row.get('target_url', ''))
-            if row_url and row_url == normalized_target:
-                # Update metrics
-                if metrics.get('impressions') is not None:
-                    row['impressions'] = str(metrics['impressions'])
-                if metrics.get('likes') is not None:
-                    row['likes'] = str(metrics['likes'])
-                if metrics.get('comments') is not None:
-                    row['comments'] = str(metrics['comments'])
-                if metrics.get('reposts') is not None:
-                    row['retweets'] = str(metrics['reposts'])
-                # Update synced_at timestamp
-                row['synced_at'] = datetime.now().isoformat()
-                updated = True
-                break
-
-        if not updated:
-            return
-
-        tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
-        try:
-            with tmp_path.open('w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(rows)
-            tmp_path.replace(csv_path)
-            logger.info(f"✅ Updated metrics in CSV for {normalized_target}")
-        except Exception as e:
-            logger.warning(f"Failed to write links.csv: {e}")
-            if tmp_path.exists():
-                tmp_path.unlink(missing_ok=True)
+        updates = {k: v for k, v in {
+            'impressions': metrics.get('impressions'),
+            'likes': metrics.get('likes'),
+            'comments': metrics.get('comments'),
+            'retweets': metrics.get('reposts'),
+        }.items() if v is not None}
+        self._update_links_csv_row(self._normalize_x_url(target_url), updates)
 
     def _update_stats_sheet(self, link: Dict, metrics: Dict[str, int]):
         """Update stats in Google Sheets"""
@@ -931,25 +900,6 @@ class XScraper(BaseScraper):
         except Exception as e:
             logger.error(f"❌ Error writing to sheet: {str(e)}", exc_info=True)
 
-    def _get_existing_csv_activity_urls(self, csv_path: Path) -> set:
-        """Get set of activity URLs already in CSV to prevent duplicates"""
-        if not csv_path.exists():
-            return set()
-
-        existing_urls = set()
-        try:
-            with open(csv_path, 'r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    activity_url = row.get('activity_url', '').strip()
-                    if activity_url:
-                        existing_urls.add(activity_url)
-            logger.debug(f"Found {len(existing_urls)} existing activities in CSV")
-        except Exception as e:
-            logger.warning(f"Could not read existing CSV data: {e}")
-            return set()
-
-        return existing_urls
 
     def write_activities_to_csv(self, activities: List[Dict], target_url: str):
         """Write activities to CSV file (append-only, no overwrites)"""

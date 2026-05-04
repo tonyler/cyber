@@ -1,0 +1,79 @@
+{#
+  embed_post(url, platform, title)
+  ─────────────────────────────────
+  Renders the native embed blockquote for X/Twitter or Reddit.
+  Caller is responsible for loading the platform widget script once
+  per page (use the embed_scripts macro below).
+
+  platform: 'x' | 'reddit'  (inferred from url if omitted)
+#}
+{% macro embed_post(url, platform='', title='View post') %}
+  {%- set _plat = platform or _infer_platform(url) -%}
+  {%- if url -%}
+    {%- if _plat == 'x' -%}
+      {# Extract tweet ID from any x.com/twitter.com URL and use the direct embed endpoint.
+         Handles: x.com/user/status/ID, x.com/i/status/ID, twitter.com/user/status/ID #}
+      {%- set _tweet_id = url.rstrip('/').split('/')[-1].split('?')[0] -%}
+      <iframe src="https://platform.twitter.com/embed/Tweet.html?id={{ _tweet_id }}&theme=dark&dnt=true"
+              style="width:100%;height:100%;border:none;border-radius:6px;background:var(--bg);"
+              loading="lazy"
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              title="{{ title }}"></iframe>
+    {%- elif _plat == 'reddit' -%}
+      {# Build redditmedia iframe URL directly — works for all Reddit URL formats
+         including /s/ share links, without any scraping or API calls. #}
+      {%- set _media_url = url
+            | replace('www.reddit.com', 'www.redditmedia.com')
+            | replace('old.reddit.com', 'www.redditmedia.com')
+            | replace('://reddit.com', '://www.redditmedia.com') -%}
+      {%- if '?' in _media_url -%}
+        {%- set _media_url = _media_url + '&embed=true&ref_source=embed' -%}
+      {%- else -%}
+        {%- set _media_url = _media_url + '?embed=true&ref_source=embed' -%}
+      {%- endif -%}
+      <iframe src="{{ _media_url }}"
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              style="width:100%;height:100%;border:none;border-radius:6px;background:var(--bg);"
+              loading="lazy"
+              title="{{ title }}"></iframe>
+    {%- else -%}
+      <a href="{{ url }}" target="_blank" rel="noopener noreferrer" class="h-embed-fallback">
+        <span class="h-embed-fallback-title">{{ title }}</span>
+        <span class="h-embed-fallback-url">{{ url }}</span>
+      </a>
+    {%- endif -%}
+  {%- else -%}
+    <span style="font-size:0.85rem;color:var(--tx-max);">{{ title or 'Untitled' }}</span>
+  {%- endif -%}
+{% endmacro %}
+
+
+{#
+  _infer_platform(url)
+  Derives 'x' or 'reddit' from the URL host.
+  Called internally by embed_post when platform is not supplied.
+#}
+{% macro _infer_platform(url) %}
+  {%- if 'x.com' in url or 'twitter.com' in url -%}x
+  {%- elif 'reddit.com' in url or 'redd.it' in url -%}reddit
+  {%- else -%}{%- endif -%}
+{% endmacro %}
+
+
+{#
+  embed_scripts(platforms)
+  ─────────────────────────
+  Call once per page, after all embed_post usages.
+  platforms: list of platform strings, e.g. ['x', 'reddit']
+
+  Example:
+    {{ embed_scripts(['x', 'reddit']) }}
+#}
+{% macro embed_scripts(platforms) %}
+  {%- if 'x' in platforms or 'twitter' in platforms -%}
+    <script async src="https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+  {%- endif -%}
+  {%- if 'reddit' in platforms -%}
+    <script async src="https://embed.reddit.com/widgets.js" charset="UTF-8"></script>
+  {%- endif -%}
+{% endmacro %}

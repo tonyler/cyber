@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 import logging
+from urllib.parse import urlparse
 
 # Add shared to path for config import
 _bot_dir = Path(__file__).resolve().parent
@@ -28,9 +29,13 @@ LINKS_CSV = DATABASE_DIR / "links.csv"
 MEMBERS_CSV = DATABASE_DIR / "members.csv"
 
 PLATFORMS = {
-    'X': ['twitter.com', 'x.com'],
-    'Reddit': ['reddit.com']
+    'X': ['twitter.com', 'x.com', 't.co'],
+    'Reddit': ['reddit.com', 'redd.it']
 }
+
+SUBMIT_CHANNEL_ID = 1468594212692955361
+
+URL_RE = re.compile(r'https?://[^\s<>]+')
 
 PLATFORM_EMOJIS = {'X': '🐦', 'Reddit': '🔴'}
 
@@ -84,10 +89,22 @@ class ContentBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    def detect_platform(self, url):
-        url_lower = url.lower()
-        for platform, keywords in PLATFORMS.items():
-            if any(kw in url_lower for kw in keywords):
+    def detect_platform(self, url: str):
+        cleaned = (url or '').strip()
+        if not cleaned:
+            return None
+
+        parsed = urlparse(cleaned if re.match(r'^[a-zA-Z][a-zA-Z0-9+.-]*://', cleaned) else f'https://{cleaned}')
+        host = (parsed.netloc or parsed.path.split('/')[0]).lower().lstrip('www.')
+
+        for platform, domains in PLATFORMS.items():
+            if any(host == domain or host.endswith(f".{domain}") for domain in domains):
+                return platform
+
+        # Fallback for malformed links that still include known domains.
+        url_lower = cleaned.lower()
+        for platform, domains in PLATFORMS.items():
+            if any(domain in url_lower for domain in domains):
                 return platform
         return None
 
@@ -128,40 +145,45 @@ class ContentBot(commands.Cog):
 
         return _write_csv(LINKS_CSV, rows, fieldnames)
 
-    @app_commands.command(name='submit', description='Submit content for a raid')
-    @app_commands.describe(link='The URL of your X or Reddit post', notes='Optional notes about the content')
-    async def submit(self, interaction: discord.Interaction, link: str, notes: str = ''):
-        platform = self.detect_platform(link)
-        if not platform:
-            await interaction.response.send_message("URL not recognized. Please submit an X or Reddit link.", ephemeral=True)
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
+        if message.channel.id != SUBMIT_CHANNEL_ID:
             return
 
-        await interaction.response.defer()
+        urls = URL_RE.findall(message.content)
+        for url in urls:
+            url = url.rstrip('.,)>"\']')  # strip trailing punctuation Discord may include
+            platform = self.detect_platform(url)
+            if not platform:
+                continue
 
-        try:
-            author = interaction.user.name
-            success = self.save_link_to_csv(link, author, platform, notes)
+            try:
+                author = message.author.name
+                normalized_url = _normalize_url(url)
+                success = self.save_link_to_csv(normalized_url, author, platform)
 
-            if not success:
-                await interaction.followup.send("Failed to save, please try again.", ephemeral=True)
-                return
+                if not success:
+                    logger.error(f"Failed to save link from {author}: {url}")
+                    continue
 
-            embed = discord.Embed(title="🦾 ATTACK", color=0x2d2d2d)
-            embed.add_field(name="Platform", value=f"{PLATFORM_EMOJIS.get(platform, '📱')} {platform}", inline=False)
-            embed.add_field(name="Posted by", value=f"@{interaction.user.display_name}", inline=False)
-            embed.add_field(name="Link", value=link, inline=False)
-            if notes:
-                embed.add_field(name="Notes", value=notes, inline=False)
-            embed.set_footer(text="Go engage! Like, Comment, RT/Upvote")
+                lines = [
+                    "@everyone",
+                    f"**🦾 ATTACK** | {PLATFORM_EMOJIS.get(platform, '📱')} {platform} | @{message.author.display_name}",
+                ]
+                raid_msg = await message.reply(
+                    content="\n".join(lines),
+                    allowed_mentions=discord.AllowedMentions(everyone=True, roles=False, users=False, replied_user=False),
+                )
+                await raid_msg.add_reaction('✅')
+                await message.add_reaction('✅')
 
-            message = await interaction.followup.send(content="@everyone", embed=embed)
-            await message.add_reaction('✅')
+                logger.info(f"Auto-submitted link by {author}: {url} -> {normalized_url}")
+                break  # One raid message per original message
 
-            logger.info(f"Link submitted by {author}: {link}")
-
-        except Exception as e:
-            logger.error(f"Error submitting content: {e}")
-            await interaction.followup.send("Failed to save, please try again.", ephemeral=True)
+            except Exception as e:
+                logger.error(f"Error auto-submitting link from {message.author.name}: {e}")
 
 
 class RegistrationBot(commands.Cog):
@@ -211,46 +233,6 @@ class RegistrationBot(commands.Cog):
             username = username[2:]
         return username.lower()
 
-    def save_member_to_csv(self, discord_user: str, x_handle: str, reddit_username: str) -> bool:
-        """Save or update member in members.csv."""
-        rows = _read_csv(MEMBERS_CSV)
-
-        # Find existing member
-        found = False
-        discord_lower = discord_user.lower()
-        for row in rows:
-            if row.get('discord_user', '').lower() == discord_lower:
-                # Update existing
-                row['x_handle'] = x_handle
-                row['reddit_username'] = reddit_username
-                row['last_active'] = datetime.now().strftime('%Y-%m-%d')
-                found = True
-                break
-
-        if not found:
-            # Add new member
-            new_row = {
-                'discord_user': discord_user,
-                'x_handle': x_handle,
-                'reddit_username': reddit_username,
-                'status': 'active',
-                'joined_date': datetime.now().strftime('%Y-%m-%d'),
-                'last_activity': '',
-                'total_points': '0',
-                'last_active': datetime.now().strftime('%Y-%m-%d'),
-                'total_tasks': '',
-                'x_profile_url': f'https://x.com/{x_handle}' if x_handle else '',
-                'reddit_profile_url': f'https://reddit.com/user/{reddit_username}' if reddit_username else '',
-                'registration_date': datetime.now().strftime('%Y-%m-%d'),
-            }
-            rows.append(new_row)
-
-        fieldnames = ['discord_user', 'x_handle', 'reddit_username', 'status',
-                      'joined_date', 'last_activity', 'total_points', 'last_active',
-                      'total_tasks', 'x_profile_url', 'reddit_profile_url', 'registration_date']
-
-        return _write_csv(MEMBERS_CSV, rows, fieldnames)
-
     @app_commands.command(name='register', description='Register your X and Reddit profiles')
     @app_commands.describe(x_profile='Your X (Twitter) profile URL', reddit_profile='Your Reddit profile URL')
     async def register(self, interaction: discord.Interaction, x_profile: str = '', reddit_profile: str = ''):
@@ -288,13 +270,12 @@ class RegistrationBot(commands.Cog):
 
 @bot.event
 async def on_ready():
-    print(f'Logged in as {bot.user.name} ({bot.user.id})')
-    print('------')
+    logger.info(f'Logged in as {bot.user.name} ({bot.user.id})')
     try:
         synced = await bot.tree.sync()
-        print(f'Synced {len(synced)} command(s)')
+        logger.info(f'Synced {len(synced)} command(s)')
     except Exception as e:
-        print(f'Failed to sync commands: {e}')
+        logger.error(f'Failed to sync commands: {e}')
 
 
 async def setup():

@@ -124,15 +124,47 @@ class RedditScraper(BaseScraper):
 
         return metrics
 
+    def _detect_reddit_page_state(self, url: str) -> str:
+        """Classify Reddit page state. Returns 'ok', 'login_wall', 'quarantine', 'not_found', or 'unknown'."""
+        try:
+            current_url = self.page.url
+            if '/login' in current_url or 'reddit.com/login' in current_url:
+                return 'login_wall'
+            body = self.page.locator('body').text_content() or ''
+            body_lower = body.lower()
+            if 'this community is quarantined' in body_lower:
+                return 'quarantine'
+            if 'page not found' in body_lower or 'that page doesn' in body_lower:
+                return 'not_found'
+            if 'you must be 18' in body_lower or 'nsfw' in body_lower[:200]:
+                return 'nsfw_gate'
+            return 'ok'
+        except Exception:
+            return 'unknown'
+
     def scrape_reddit_comments(self, post_url: str) -> List[Dict]:
         logger.info(f"Scraping comments from: {post_url}")
 
         comments = []
 
         try:
+            # Resolve /s/ share URLs before converting to old.reddit —
+            # old.reddit does not follow /s/ redirects the same way www.reddit does.
+            if '/s/' in post_url:
+                self._safe_get(post_url)
+                time.sleep(2)
+                resolved = self.page.url
+                logger.info(f"Resolved share URL {post_url} → {resolved}")
+                post_url = resolved
+
             post_url = self._to_old_reddit(post_url)
             self._safe_get(post_url)
             time.sleep(3)
+
+            state = self._detect_reddit_page_state(post_url)
+            if state != 'ok':
+                logger.warning(f"Reddit page state '{state}' on {post_url}; skipping comments.")
+                return comments
 
             comment_elements = self.page.locator('.comment').all()
             logger.info(f"Found {len(comment_elements)} comment elements")
@@ -221,25 +253,6 @@ class RedditScraper(BaseScraper):
         logger.info(f"Matched {len(matched)}/{len(comments)} comments to registered members")
         return matched
 
-    def _get_existing_csv_activity_urls(self, csv_path: Path) -> set:
-        """Get set of activity URLs already in CSV to prevent duplicates"""
-        if not csv_path.exists():
-            return set()
-
-        existing_urls = set()
-        try:
-            with csv_path.open('r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    url = row.get('activity_url', '').strip()
-                    if url:
-                        existing_urls.add(url)
-        except Exception as e:
-            logger.warning(f"Could not read existing CSV data: {e}")
-            return set()
-
-        return existing_urls
-
     def write_activities_to_csv(self, activities: List[Dict], target_url: str):
         """Write activities to reddit_activity_log.csv (append-only)"""
         if not activities:
@@ -300,62 +313,20 @@ class RedditScraper(BaseScraper):
             logger.error(f"Failed to write activities to CSV: {e}", exc_info=True)
 
     def _update_metrics_csv(self, target_url: str, metrics: Dict[str, int]):
-        """Update metrics (upvotes, comments) in links.csv"""
-        csv_path = Path(__file__).parent.parent / "database" / "links.csv"
-        if not csv_path.exists():
-            logger.warning("links.csv not found")
-            return
-
-        try:
-            with csv_path.open('r', newline='', encoding='utf-8') as f:
-                reader = csv.DictReader(f)
-                fieldnames = reader.fieldnames
-                rows = list(reader)
-        except Exception as e:
-            logger.warning(f"Failed to read links.csv: {e}")
-            return
-
-        if not fieldnames:
-            return
-
-        updated = False
-        for row in rows:
-            row_url = row.get('url', '').strip()
-            # Normalize URLs for comparison
-            if self._urls_match(row_url, target_url):
-                row['likes'] = str(metrics.get('upvotes', 0))
-                row['comments'] = str(metrics.get('comments', 0))
-                updated = True
-                break
-
-        if not updated:
-            logger.debug(f"URL not found in links.csv: {target_url}")
-            return
-
-        tmp_path = csv_path.with_suffix(csv_path.suffix + ".tmp")
-        try:
-            with tmp_path.open('w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(rows)
-            tmp_path.replace(csv_path)
-            logger.info(f"✅ Updated metrics in CSV for {target_url}")
-        except Exception as e:
-            logger.warning(f"Failed to write links.csv: {e}")
-            if tmp_path.exists():
-                tmp_path.unlink(missing_ok=True)
+        """Update metrics (upvotes, comments) in links.csv."""
+        updates = {k: v for k, v in {
+            'likes': metrics.get('upvotes'),
+            'comments': metrics.get('comments'),
+        }.items() if v is not None}
+        self._update_links_csv_row(target_url, updates)
 
     def _urls_match(self, url1: str, url2: str) -> bool:
-        """Check if two Reddit URLs refer to the same post"""
+        """Check if two Reddit URLs refer to the same post (extracts post ID)."""
         def normalize(url: str) -> str:
             url = url.lower().strip().rstrip('/')
-            url = url.replace('www.reddit.com', 'reddit.com')
-            url = url.replace('old.reddit.com', 'reddit.com')
-            # Extract post ID if present
-            match = re.search(r'/comments/([a-z0-9]+)', url)
-            if match:
-                return match.group(1)
-            return url
+            url = url.replace('www.reddit.com', 'reddit.com').replace('old.reddit.com', 'reddit.com')
+            m = re.search(r'/comments/([a-z0-9]+)', url)
+            return m.group(1) if m else url
         return normalize(url1) == normalize(url2)
 
     def _update_stats_sheet(self, link: Dict, metrics: Dict[str, int]):
@@ -462,16 +433,6 @@ class RedditScraper(BaseScraper):
                 logger.warning(f"Failed to sync impressions to CSV: {e}")
                 if tmp_path.exists():
                     tmp_path.unlink(missing_ok=True)
-
-    def _get_current_month_tab(self) -> str:
-        """Get current month tab name based on config format (e.g., '01/26')"""
-        now = datetime.now()
-        month_tab_format = self.sheet_config.get('sync', {}).get('month_tab_format', 'MM/YY')
-
-        if month_tab_format == 'MM/YYYY':
-            return now.strftime('%m/%Y')
-        else:  # Default to MM/YY
-            return now.strftime('%m/%y')
 
     def write_comments_to_sheet(self, matched_comments: List[Dict], target_url: str):
         """Write matched comments to Google Sheets monthly tab"""

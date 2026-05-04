@@ -4,6 +4,7 @@ Centralized logging configuration for the Cyber project.
 
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # Project root for log files
@@ -41,10 +42,15 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     console_handler.setFormatter(console_format)
     logger.addHandler(console_handler)
 
-    # File handler
+    # Keep the on-disk log bounded so restart loops cannot fill the disk.
     log_file = LOGS_DIR / "cyber.log"
     try:
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
         file_handler.setLevel(level)
         file_format = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',

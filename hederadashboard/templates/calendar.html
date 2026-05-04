@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+{% block title %}Calendar — Cybernetics{% endblock %}
+
+{% block content %}
+
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+  <div>
+    <h1 class="h-page-title">Calendar</h1>
+    <p style="font-size:0.82rem;color:var(--tx-dim);margin-top:0.3rem;">Scheduled events &amp; coordination</p>
+  </div>
+  {% if is_editor %}
+  <button onclick="document.getElementById('dialog-add').showModal()" class="h-btn h-btn-primary h-btn-lg shrink-0">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    </svg>
+    Add Event
+  </button>
+  {% endif %}
+</div>
+
+<!-- Two-column layout: calendar grid + event list -->
+<div class="xl:grid xl:grid-cols-[380px_1fr] gap-8">
+
+  <!-- Calendar grid widget -->
+  <div class="h-panel p-5 mb-8 xl:mb-0" style="align-self:start;">
+    <!-- Month nav -->
+    <div class="flex items-center justify-between mb-5">
+      <button id="cal-prev" class="h-btn h-btn-secondary h-btn-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+      </button>
+      <span id="cal-month-label" style="font-weight:700;font-size:0.95rem;color:var(--tx-max);letter-spacing:-0.01em;"></span>
+      <button id="cal-next" class="h-btn h-btn-secondary h-btn-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Day headers -->
+    <div class="cal-grid mb-1">
+      {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+      <div class="cal-day-header">{{ d }}</div>
+      {% endfor %}
+    </div>
+
+    <!-- Day cells -->
+    <div id="cal-grid" class="cal-grid"></div>
+
+    <!-- Mini legend -->
+    <div class="flex items-center gap-3 mt-4" style="padding-top:0.75rem;border-top:1px solid var(--b-dim);">
+      <div class="flex items-center gap-1.5">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--ind);box-shadow:0 0 6px var(--ind);"></div>
+        <span class="h-section-label" style="text-transform:none;">Has event</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--vio-text);box-shadow:0 0 6px var(--vio);"></div>
+        <span class="h-section-label" style="text-transform:none;">Today</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event list -->
+  <div>
+    {% if events %}
+    <div class="flex flex-col gap-5" id="events-list">
+      {% for event in events %}
+      <article class="h-event-card" data-date="{{ event.date }}" id="event-{{ event.id }}">
+
+        <!-- Header -->
+        <div class="flex items-start justify-between gap-4 p-5" style="border-bottom:1px solid var(--b-dim);">
+          <div class="flex-1 min-w-0">
+            <div class="flex flex-wrap items-center gap-2 mb-2">
+              <span class="h-event-date-badge">{{ event.date }}</span>
+              {% if event.created_by %}
+              <span class="h-badge h-badge-gray">by {{ event.created_by }}</span>
+              {% endif %}
+            </div>
+            <h2 class="h-event-title">{{ event.title }}</h2>
+          </div>
+          {% if is_editor %}
+          <div class="flex items-center gap-2 shrink-0">
+            <button onclick="openEdit('{{ event.id }}', {{ event | tojson }})"
+                    class="h-btn h-btn-secondary h-btn-sm">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+              Edit
+            </button>
+            <form method="post" action="{{ url_for('calendar_delete', event_id=event.id) }}"
+                  onsubmit="return confirm('Delete this event?');" style="margin:0;">
+              <button type="submit" class="h-btn h-btn-danger h-btn-sm">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Delete
+              </button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Instructions -->
+        {% if event.instructions %}
+        <details style="border-bottom:1px solid var(--b-dim);">
+          <summary class="px-5 py-3 cursor-pointer h-summary h-collapsible"
+                   style="font-size:0.75rem;font-weight:600;color:var(--tx-dim);letter-spacing:0.08em;text-transform:uppercase;font-family:'JetBrains Mono',monospace;">
+            Instructions
+          </summary>
+          <div class="px-5 pb-4" style="font-size:0.88rem;color:var(--tx);line-height:1.75;white-space:pre-wrap;">{{ event.instructions }}</div>
+        </details>
+        {% endif %}
+
+        <!-- Preparation -->
+        <div class="p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--ind-text);">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+              </svg>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--ind-text);">Preparation</span>
+            </div>
+            {% if is_editor %}
+            <button onclick="openPrep('{{ event.id }}', {{ event.preparation_notes | tojson }})"
+                    class="h-btn h-btn-secondary h-btn-sm">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+              </svg>
+              Edit notes
+            </button>
+            {% endif %}
+          </div>
+          {% if event.preparation_html %}
+          <div class="h-markdown">{{ event.preparation_html | safe }}</div>
+          {% else %}
+          <p style="font-size:0.82rem;color:var(--tx-dim);font-style:italic;">
+            No preparation notes yet.{% if is_editor %} Click "Edit notes" to add some.{% endif %}
+          </p>
+          {% endif %}
+        </div>
+
+      </article>
+      {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="h-panel p-14 text-center">
+      <svg class="mx-auto w-10 h-10 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--tx-dim);">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+      </svg>
+      <p style="font-size:0.88rem;color:var(--tx-dim);">No events scheduled yet.</p>
+      {% if is_editor %}
+      <button onclick="document.getElementById('dialog-add').showModal()" class="h-btn h-btn-primary mt-4">Add first event</button>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+
+<!-- ── Dialogs ────────────────────────────────────────────────────────────── -->
+{% if is_editor %}
+
+<dialog id="dialog-add">
+  <div class="h-dialog-header">
+    <span class="h-dialog-title">New Event</span>
+    <button class="h-dialog-close" onclick="document.getElementById('dialog-add').close()">✕</button>
+  </div>
+  <form method="post" action="{{ url_for('calendar_create') }}">
+    <div class="h-dialog-body flex flex-col gap-4">
+      <div class="h-form-group">
+        <label for="add-date">Date</label>
+        <input type="date" id="add-date" name="date" required>
+      </div>
+      <div class="h-form-group">
+        <label for="add-title">Title</label>
+        <input type="text" id="add-title" name="title" placeholder="Event name…" required>
+      </div>
+      <div class="h-form-group">
+        <label for="add-instructions">Instructions</label>
+        <textarea id="add-instructions" name="instructions" rows="4" placeholder="What needs to be done, targets, guidelines…"></textarea>
+      </div>
+      <div class="h-form-group">
+        <label for="add-prep">Preparation notes <span style="color:var(--tx-dim);font-size:0.6rem;">(Markdown supported)</span></label>
+        <textarea id="add-prep" name="preparation_notes" rows="5" placeholder="What has been prepared so far…"></textarea>
+      </div>
+    </div>
+    <div class="h-dialog-footer">
+      <button type="button" class="h-btn h-btn-secondary" onclick="document.getElementById('dialog-add').close()">Cancel</button>
+      <button type="submit" class="h-btn h-btn-primary">Create Event</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dialog-edit">
+  <div class="h-dialog-header">
+    <span class="h-dialog-title">Edit Event</span>
+    <button class="h-dialog-close" onclick="document.getElementById('dialog-edit').close()">✕</button>
+  </div>
+  <form method="post" id="edit-form">
+    <div class="h-dialog-body flex flex-col gap-4">
+      <div class="h-form-group">
+        <label for="edit-date">Date</label>
+        <input type="date" id="edit-date" name="date" required>
+      </div>
+      <div class="h-form-group">
+        <label for="edit-title">Title</label>
+        <input type="text" id="edit-title" name="title" required>
+      </div>
+      <div class="h-form-group">
+        <label for="edit-instructions">Instructions</label>
+        <textarea id="edit-instructions" name="instructions" rows="4"></textarea>
+      </div>
+      <div class="h-form-group">
+        <label for="edit-prep">Preparation notes <span style="color:var(--tx-dim);font-size:0.6rem;">(Markdown supported)</span></label>
+        <textarea id="edit-prep" name="preparation_notes" rows="5"></textarea>
+      </div>
+    </div>
+    <div class="h-dialog-footer">
+      <button type="button" class="h-btn h-btn-secondary" onclick="document.getElementById('dialog-edit').close()">Cancel</button>
+      <button type="submit" class="h-btn h-btn-primary">Save Changes</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dialog-prep">
+  <div class="h-dialog-header">
+    <span class="h-dialog-title">Preparation Notes</span>
+    <button class="h-dialog-close" onclick="document.getElementById('dialog-prep').close()">✕</button>
+  </div>
+  <form method="post" id="prep-form">
+    <div class="h-dialog-body">
+      <p style="font-size:0.78rem;color:var(--tx-dim);margin-bottom:0.75rem;">Markdown: **bold**, *italic*, - lists, `code`, ## headings</p>
+      <textarea id="prep-notes" name="preparation_notes" rows="12" placeholder="What has been prepared…"></textarea>
+    </div>
+    <div class="h-dialog-footer">
+      <button type="button" class="h-btn h-btn-secondary" onclick="document.getElementById('dialog-prep').close()">Cancel</button>
+      <button type="submit" class="h-btn h-btn-primary">Save Notes</button>
+    </div>
+  </form>
+</dialog>
+
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+// ── Calendar grid ────────────────────────────────────────────────────────────
+(function () {
+  const events = {{ events | tojson }};
+  const eventDates = {};
+  events.forEach(e => {
+    const d = e.date;
+    if (!eventDates[d]) eventDates[d] = [];
+    eventDates[d].push(e);
+  });
+
+  const today = new Date();
+  let viewYear  = today.getFullYear();
+  let viewMonth = today.getMonth(); // 0-indexed
+
+  const MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+
+  function buildGrid() {
+    const label = document.getElementById('cal-month-label');
+    const grid  = document.getElementById('cal-grid');
+    if (!label || !grid) return;
+    label.textContent = `${MONTHS[viewMonth]} ${viewYear}`;
+    grid.innerHTML = '';
+
+    const firstDay = new Date(viewYear, viewMonth, 1);
+    // Monday-based: Mon=0 … Sun=6
+    let startOffset = (firstDay.getDay() + 6) % 7;
+    const daysInMonth  = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const daysInPrev   = new Date(viewYear, viewMonth, 0).getDate();
+    const totalCells   = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+
+    for (let i = 0; i < totalCells; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'cal-day';
+
+      let dayNum, isCurrentMonth = true;
+      if (i < startOffset) {
+        dayNum = daysInPrev - startOffset + i + 1;
+        isCurrentMonth = false;
+        cell.classList.add('other-month');
+      } else if (i >= startOffset + daysInMonth) {
+        dayNum = i - startOffset - daysInMonth + 1;
+        isCurrentMonth = false;
+        cell.classList.add('other-month');
+      } else {
+        dayNum = i - startOffset + 1;
+      }
+
+      const dateStr = isCurrentMonth
+        ? `${viewYear}-${String(viewMonth + 1).padStart(2,'0')}-${String(dayNum).padStart(2,'0')}`
+        : null;
+
+      const numEl = document.createElement('div');
+      numEl.className = 'cal-day-num';
+      numEl.textContent = dayNum;
+      cell.appendChild(numEl);
+
+      if (dateStr && eventDates[dateStr]) {
+        cell.classList.add('has-event');
+        eventDates[dateStr].slice(0, 2).forEach(ev => {
+          const dot = document.createElement('div');
+          dot.className = 'cal-event-dot';
+          dot.textContent = ev.title.length > 14 ? ev.title.slice(0,14) + '…' : ev.title;
+          cell.appendChild(dot);
+        });
+        cell.addEventListener('click', () => scrollToEvent(eventDates[dateStr][0].id));
+      }
+
+      if (isCurrentMonth && dayNum === today.getDate() &&
+          viewMonth === today.getMonth() && viewYear === today.getFullYear()) {
+        cell.classList.add('today');
+      }
+
+      grid.appendChild(cell);
+    }
+  }
+
+  function scrollToEvent(id) {
+    const el = document.getElementById('event-' + id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.boxShadow = '0 0 0 2px var(--ind), var(--ind-glow)';
+      setTimeout(() => { el.style.boxShadow = ''; }, 2000);
+    }
+  }
+
+  document.getElementById('cal-prev')?.addEventListener('click', () => {
+    viewMonth--;
+    if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+    buildGrid();
+  });
+
+  document.getElementById('cal-next')?.addEventListener('click', () => {
+    viewMonth++;
+    if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+    buildGrid();
+  });
+
+  buildGrid();
+})();
+
+// ── Editor dialogs ────────────────────────────────────────────────────────────
+{% if is_editor %}
+function openEdit(id, event) {
+  const form = document.getElementById('edit-form');
+  form.action = window.CYBER_BASE_URL + '/calendar/edit/' + id;
+  document.getElementById('edit-date').value = event.date || '';
+  document.getElementById('edit-title').value = event.title || '';
+  document.getElementById('edit-instructions').value = event.instructions || '';
+  document.getElementById('edit-prep').value = event.preparation_notes || '';
+  document.getElementById('dialog-edit').showModal();
+}
+
+function openPrep(id, notes) {
+  document.getElementById('prep-form').action = window.CYBER_BASE_URL + '/calendar/prep/' + id;
+  document.getElementById('prep-notes').value = notes || '';
+  document.getElementById('dialog-prep').showModal();
+}
+
+['dialog-add','dialog-edit','dialog-prep'].forEach(id => {
+  const d = document.getElementById(id);
+  if (d) d.addEventListener('click', e => { if (e.target === d) d.close(); });
+});
+{% endif %}
+</script>
+{% endblock %}

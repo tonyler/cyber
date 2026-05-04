@@ -17,10 +17,20 @@ log_warn() {
     echo "⚠️  $1"
 }
 
+systemd_dashboard_active() {
+    command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet cyber-dashboard.service
+}
+
+find_existing_pid() {
+    local pattern="$1"
+    pgrep -f -- "$pattern" 2>/dev/null | head -n 1 || true
+}
+
 start_with_pidfile() {
     local name="$1"
     local pidfile="$2"
-    shift 2
+    local pattern="$3"
+    shift 3
 
     if [ -f "$pidfile" ]; then
         local existing_pid
@@ -32,8 +42,29 @@ start_with_pidfile() {
         rm -f "$pidfile"
     fi
 
+    local discovered_pid
+    discovered_pid="$(find_existing_pid "$pattern")"
+    if [ -n "$discovered_pid" ] && ps -p "$discovered_pid" > /dev/null 2>&1; then
+        echo "$discovered_pid" > "$pidfile"
+        echo "✅ $name already running (PID: $discovered_pid)"
+        return 0
+    fi
+
     nohup "$@" > "$LOGS_DIR/$(echo "$name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]').log" 2>&1 &
     local new_pid=$!
+    sleep 1
+
+    if ! ps -p "$new_pid" > /dev/null 2>&1; then
+        discovered_pid="$(find_existing_pid "$pattern")"
+        if [ -n "$discovered_pid" ] && ps -p "$discovered_pid" > /dev/null 2>&1; then
+            new_pid="$discovered_pid"
+        else
+            log_warn "$name failed to start; check $LOGS_DIR/$(echo "$name" | tr ' ' '_' | tr '[:upper:]' '[:lower:]').log"
+            rm -f "$pidfile"
+            return 0
+        fi
+    fi
+
     echo "$new_pid" > "$pidfile"
     echo "✅ $name started (PID: $new_pid)"
 }
@@ -110,14 +141,20 @@ if [ "${ENABLE_SYNC:-0}" -eq 1 ]; then
     echo "Starting Sync Daemon..."
     SYNC_PYTHON="$ROOT_VENV/bin/python3"
     start_with_pidfile "Sync Daemon" "$LOGS_DIR/sync_daemon.pid" \
+        "$SYNC_WORKER" \
         "$SYNC_PYTHON" "$SYNC_WORKER"
 fi
 
 if [ "${ENABLE_DASHBOARD:-0}" -eq 1 ]; then
     echo ""
     echo "Starting Flask Dashboard 3.0..."
-    start_with_pidfile "Dashboard" "$LOGS_DIR/dashboard.pid" \
-        "$ROOT_VENV/bin/python3" "$DASHBOARD_APP"
+    if systemd_dashboard_active; then
+        echo "✅ Dashboard already managed by cyber-dashboard.service"
+    else
+        start_with_pidfile "Dashboard" "$LOGS_DIR/dashboard.pid" \
+            "$DASHBOARD_APP" \
+            "$ROOT_VENV/bin/python3" "$DASHBOARD_APP"
+    fi
 fi
 
 echo ""

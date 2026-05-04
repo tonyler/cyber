@@ -1,3 +1,4 @@
+import csv
 import os
 import sys
 import re
@@ -6,7 +7,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict
 from playwright.sync_api import sync_playwright, Browser, Page, BrowserContext
-from playwright_stealth import stealth
 
 project_root = Path(__file__).parent.parent
 shared_dir = project_root / "shared"
@@ -56,19 +56,24 @@ class BaseScraper:
             )
 
         if self.context is None:
-            # Use iPhone 14 Pro for mobile X scraping (faster, simpler DOM)
-            iphone = self.playwright.devices['iPhone 14 Pro']
+            # Use Chrome Android UA — mobile viewport, Chromium UA.
+            # iPhone/Safari UA causes X to serve a layout with no article elements.
             self.context = self.browser.new_context(
-                **iphone,
+                viewport={'width': 390, 'height': 844},
+                user_agent=(
+                    'Mozilla/5.0 (Linux; Android 14; Pixel 8) '
+                    'AppleWebKit/537.36 (KHTML, like Gecko) '
+                    'Chrome/124.0.0.0 Mobile Safari/537.36'
+                ),
+                is_mobile=True,
+                has_touch=True,
+                device_scale_factor=2.0,
                 ignore_https_errors=True,
-                locale='en-US'
+                locale='en-US',
             )
 
         if self.page is None:
             self.page = self.context.new_page()
-            # Apply stealth to avoid detection
-            # TODO: Fix stealth implementation
-            # stealth(self.page)
 
         logger.info("Browser initialized successfully")
 
@@ -104,6 +109,12 @@ class BaseScraper:
                 if self.page is None:
                     self._init_browser()
                 self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
+                # X is a React SPA — wait for article elements to render before returning
+                if 'x.com' in url or 'twitter.com' in url:
+                    try:
+                        self.page.wait_for_selector('article', timeout=10000)
+                    except Exception:
+                        pass  # Proceed anyway; caller handles empty results
                 return
             except Exception as exc:
                 if attempt < retries:
@@ -187,6 +198,77 @@ class BaseScraper:
         elif multiplier == 'B':
             return int(number * 1000000000)
         return int(number)
+
+    def _get_current_month_tab(self) -> str:
+        """Get current month tab name based on config format (e.g., '01/26')."""
+        now = datetime.now()
+        month_tab_format = self.sheet_config.get('sync', {}).get('month_tab_format', 'MM/YY')
+        if month_tab_format == 'MM/YYYY':
+            return now.strftime('%m/%Y')
+        return now.strftime('%m/%y')
+
+    def _get_existing_csv_activity_urls(self, csv_path: Path) -> set:
+        """Return set of activity_url values already in a CSV to prevent duplicates."""
+        if not csv_path.exists():
+            return set()
+        existing = set()
+        try:
+            with csv_path.open('r', newline='', encoding='utf-8') as f:
+                for row in csv.DictReader(f):
+                    url = row.get('activity_url', '').strip()
+                    if url:
+                        existing.add(url)
+        except Exception as e:
+            logger.warning(f"Could not read existing CSV data: {e}")
+        return existing
+
+    def _update_links_csv_row(self, target_url: str, updates: dict):
+        """Update specific columns for a matching row in links.csv using tmp-file safety."""
+        csv_path = Path(__file__).parent.parent / "database" / "links.csv"
+        if not csv_path.exists():
+            logger.warning("links.csv not found")
+            return
+
+        try:
+            with csv_path.open('r', newline='', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                fieldnames = list(reader.fieldnames or [])
+                rows = list(reader)
+        except Exception as e:
+            logger.warning(f"Failed to read links.csv: {e}")
+            return
+
+        updated = False
+        for row in rows:
+            row_url = (row.get('url') or row.get('target_url', '')).strip()
+            if self._urls_match(row_url, target_url):
+                for key, value in updates.items():
+                    if key not in fieldnames:
+                        fieldnames.append(key)
+                    if value is not None:
+                        row[key] = str(value)
+                row['synced_at'] = datetime.now().isoformat()
+                updated = True
+                break
+
+        if not updated:
+            return
+
+        tmp_path = csv_path.with_suffix(csv_path.suffix + '.tmp')
+        try:
+            with tmp_path.open('w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+            tmp_path.replace(csv_path)
+            logger.info(f"Updated links.csv for {target_url}")
+        except Exception as e:
+            logger.warning(f"Failed to write links.csv: {e}")
+            tmp_path.unlink(missing_ok=True)
+
+    def _urls_match(self, url1: str, url2: str) -> bool:
+        """Check if two URLs refer to the same resource (platform-agnostic base)."""
+        return url1.rstrip('/').lower() == url2.rstrip('/').lower()
 
     def __enter__(self):
         """Context manager entry"""
