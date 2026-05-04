@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Activity — Cybernetics{% endblock %}
+
+{% block content %}
+
+<div class="mb-8">
+  <h1 class="h-page-title">Activity</h1>
+  <p style="font-size:0.82rem;color:var(--tx-dim);margin-top:0.3rem;">Member contributions across platforms</p>
+</div>
+
+<!-- Filters -->
+<div class="h-panel px-5 py-4 mb-6">
+  <form method="get" class="flex flex-wrap items-end gap-4">
+    <div>
+      <label for="month-input">Month</label>
+      <input type="month" id="month-input" name="month" value="{{ month }}" style="width:auto;text-align:center;">
+    </div>
+    <div>
+      <label for="platform-select">Platform</label>
+      <select id="platform-select" name="platform" style="width:auto;text-align:center;">
+        <option value="all"    {% if platform == 'all' %}selected{% endif %}>All Platforms</option>
+        <option value="x"      {% if platform == 'x' %}selected{% endif %}>X / Twitter</option>
+        <option value="reddit" {% if platform == 'reddit' %}selected{% endif %}>Reddit</option>
+      </select>
+    </div>
+    <button type="submit" class="h-btn h-btn-primary">Apply</button>
+  </form>
+</div>
+
+<!-- Activity list -->
+{% if activities %}
+<div class="h-panel overflow-hidden">
+  {% for act in activities %}
+  <div class="h-activity-item">
+    <div class="flex items-start gap-4">
+
+      <!-- Icon -->
+      <div class="shrink-0 mt-0.5">
+        {% if act.platform == 'x' %}
+        <div class="h-activity-icon" style="background:var(--cyn-dim);color:var(--cyn-text);">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+          </svg>
+        </div>
+        {% elif act.platform == 'reddit' %}
+        <div class="h-activity-icon" style="background:var(--pnk-dim);color:var(--pnk-text);">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 0 1 .14-.197.35.35 0 0 1 .238-.042l2.906.617a1.214 1.214 0 0 1 1.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 0 0-.231.094.33.33 0 0 0 0 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 0 0 .029-.463.33.33 0 0 0-.464 0c-.547.533-1.684.73-2.512.73-.828 0-1.979-.196-2.512-.73a.326.326 0 0 0-.232-.095z"/>
+          </svg>
+        </div>
+        {% else %}
+        <div class="h-activity-icon" style="background:var(--ind-dim);color:var(--ind-text);">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+          </svg>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Content -->
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-2 mb-1.5">
+          <span style="font-weight:700;color:var(--tx-max);font-size:0.88rem;">{{ act.discord_user }}</span>
+          {% if act.username_label %}
+          <span style="color:var(--tx-dim);font-size:0.8rem;">· {{ act.username_label }}</span>
+          {% endif %}
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="h-badge h-badge-ind">{{ act.activity_type }}</span>
+          {% if act.task_id %}
+          <span class="h-section-label" style="text-transform:none;">Task {{ act.task_id }}</span>
+          {% endif %}
+        </div>
+        <div class="flex flex-wrap items-center gap-4" style="font-size:0.8rem;">
+          {% if act.activity_url and act.activity_type|lower not in ('retweet', 'repost') %}
+          <a href="{{ act.activity_url }}" target="_blank"
+             style="color:var(--ind-text);text-decoration:none;display:flex;align-items:center;gap:0.3rem;transition:color 0.2s;"
+             onmouseover="this.style.color='var(--ind-light)'" onmouseout="this.style.color='var(--ind-text)'">
+            View activity
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+          </a>
+          {% endif %}
+          {% if act.target_url %}
+          <a href="{{ act.target_url }}" target="_blank"
+             style="color:var(--tx-dim);text-decoration:none;display:flex;align-items:center;gap:0.3rem;transition:color 0.2s;"
+             onmouseover="this.style.color='var(--tx)'" onmouseout="this.style.color='var(--tx-dim)'">
+            Target
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+            </svg>
+          </a>
+          {% endif %}
+        </div>
+        {% if act.notes %}
+        <div style="margin-top:0.5rem;font-size:0.8rem;color:var(--tx-dim);background:var(--ind-dim);border-radius:6px;padding:0.4rem 0.7rem;border-left:2px solid var(--ind-border);">
+          {{ act.notes }}
+        </div>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="mt-5 text-center">
+  <span class="h-section-label" style="text-transform:none;color:var(--tx-dim);">{{ activities|length }} activities</span>
+</div>
+
+{% else %}
+<div class="h-panel p-14 text-center">
+  <svg class="mx-auto w-10 h-10 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:var(--tx-dim);">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+  </svg>
+  <p style="font-size:0.88rem;color:var(--tx-dim);">No activity found. Try adjusting your filters.</p>
+</div>
+{% endif %}
+
+{% endblock %}
