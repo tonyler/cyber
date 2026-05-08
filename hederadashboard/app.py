@@ -498,8 +498,8 @@ def _is_calendar_editor() -> bool:
     editors_raw = os.environ.get('CALENDAR_EDITORS', '')
     if not editors_raw.strip():
         return False
-    editors = [e.strip().lower() for e in editors_raw.split(',') if e.strip()]
-    return (user.get('username') or '').lower() in editors
+    editors = [e.strip() for e in editors_raw.split(',') if e.strip()]
+    return (user.get('id') or '') in editors
 
 
 def _load_calendar_events() -> list:
