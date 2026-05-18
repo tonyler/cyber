@@ -1027,7 +1027,6 @@ class XScraper(BaseScraper):
             # Filter out duplicates
             matched_activities = self._filter_new_activities(matched_activities, url)
             if matched_activities:
-                self.write_activities_to_sheet(matched_activities, url)
                 self.write_activities_to_csv(matched_activities, url)
 
             # Save tweet content locally (CSV) and update stats sheet

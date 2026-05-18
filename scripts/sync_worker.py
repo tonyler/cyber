@@ -377,7 +377,7 @@ def run_sync():
     tasks_sheet_id = get_tasks_sheet_id()
     activity_sheet_id = get_activity_sheet_id()
 
-    if not all([members_sheet_id, tasks_sheet_id, activity_sheet_id]):
+    if not all([members_sheet_id, tasks_sheet_id]):
         logger.error("Missing sheet IDs in .env")
         return
 
@@ -398,10 +398,7 @@ def run_sync():
     # 2. Links: Backup FROM local CSV TO Sheets (CSV = source of truth)
     links_count = backup_links_to_sheets(gc, tasks_sheet_id)
 
-    # 3. Activities: Backup FROM local CSV TO Sheets (CSV = source of truth)
-    activities_count = backup_activities_to_sheets(gc, activity_sheet_id)
-
-    logger.info(f"Sync results: members_downloaded={members_count}, links_backed_up={links_count}, activities_backed_up={activities_count}")
+    logger.info(f"Sync results: members_downloaded={members_count}, links_backed_up={links_count}")
     logger.info("✅ Sync completed")
 
 
