@@ -137,21 +137,44 @@
 
 {% block extra_js %}
 {{ super() }}
+<style>
+  #sparkline-tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: rgba(15,15,20,0.92);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 0.72rem;
+    line-height: 1.5;
+    color: #e2e8f0;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.1s;
+    z-index: 9999;
+  }
+  #sparkline-tooltip.visible { opacity: 1; }
+</style>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const viewsData   = {{ views_progress | tojson }};
   const actionsData = {{ actions_progress | tojson }};
 
+  // Shared tooltip element
+  const tip = document.createElement('div');
+  tip.id = 'sparkline-tooltip';
+  document.body.appendChild(tip);
+
   [
     { canvasId:'chart-views',   emptyId:'chart-views-empty',   dateId:'views-date',   diffId:'views-diff',   totalId:'views-total',
-      dataset:viewsData,   totalKey:'total_views',
+      dataset:viewsData,   totalKey:'total_views',   diffLabel:'Views',
       lineColor:'rgba(109,40,217,0.80)', fillA:'rgba(109,40,217,0.10)', fillB:'rgba(109,40,217,0.01)' },
     { canvasId:'chart-actions', emptyId:'chart-actions-empty', dateId:'actions-date', diffId:'actions-diff', totalId:'actions-total',
-      dataset:actionsData, totalKey:'total_actions',
+      dataset:actionsData, totalKey:'total_actions', diffLabel:'Actions',
       lineColor:'rgba(15,118,110,0.80)', fillA:'rgba(15,118,110,0.10)', fillB:'rgba(15,118,110,0.01)' },
   ].forEach(renderSparkline);
 
-  function renderSparkline({ canvasId, emptyId, dateId, diffId, totalId, dataset, totalKey, lineColor, fillA, fillB }) {
+  function renderSparkline({ canvasId, emptyId, dateId, diffId, totalId, dataset, totalKey, diffLabel, lineColor, fillA, fillB }) {
     const canvas = document.getElementById(canvasId);
     const empty  = document.getElementById(emptyId);
     const dateEl = document.getElementById(dateId);
@@ -202,6 +225,28 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dateEl) dateEl.textContent = latest?.date || '—';
     if (diffEl) diffEl.textContent = latest ? `+${Intl.NumberFormat().format(latest.diff)}` : '—';
     if (totEl)  totEl.textContent  = latest ? Intl.NumberFormat().format(latest.total) : '—';
+
+    // Tooltip on hover
+    canvas.addEventListener('mousemove', e => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      // find nearest point by x distance
+      let closest = 0;
+      let minDist = Infinity;
+      pts.forEach((p, i) => { const d = Math.abs(p.x - mx); if (d < minDist) { minDist = d; closest = i; } });
+      const pt = data[closest];
+      const fmt = Intl.NumberFormat();
+      tip.innerHTML = `<span style="opacity:0.55">${pt.date}</span><br>+${fmt.format(pt.diff)} ${diffLabel}<br><span style="opacity:0.55">Total ${fmt.format(pt.total)}</span>`;
+      // position: follow cursor, flip left if near right edge
+      const tipW = 140;
+      let tx = e.clientX + 12;
+      if (tx + tipW > window.innerWidth - 8) tx = e.clientX - tipW - 12;
+      tip.style.left = tx + 'px';
+      tip.style.top  = (e.clientY - 10) + 'px';
+      tip.classList.add('visible');
+    });
+
+    canvas.addEventListener('mouseleave', () => tip.classList.remove('visible'));
   }
 });
 </script>

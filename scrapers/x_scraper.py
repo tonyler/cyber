@@ -403,6 +403,15 @@ class XScraper(BaseScraper):
                         logger.debug(f"Skipping original tweet: {reply_url}")
                         continue
 
+                    # Skip if this is a quote tweet embedded in the replies section.
+                    # Quote tweets contain a nested card that links back to the original
+                    # tweet's status ID; regular replies do not.
+                    if original_tweet_id:
+                        quoted_links = element.locator(f'a[href*="/status/{original_tweet_id}"]').all()
+                        if quoted_links:
+                            logger.debug(f"Skipping quote tweet in replies section: {reply_url}")
+                            continue
+
                     reply_data['activity_type'] = 'comment'
                     replies.append(reply_data)
                 except Exception as e:
