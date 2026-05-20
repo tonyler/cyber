@@ -50,3 +50,33 @@
 </div>
 
 {% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const BASE = 'https://platform.twitter.com/embed/Tweet.html';
+  const PARAMS = '&theme=dark&dnt=true&chrome=nofooter';
+
+  function loadEmbed(wrap) {
+    if (wrap.dataset.loaded) return;
+    wrap.dataset.loaded = '1';
+    const id = wrap.dataset.tweetId;
+    const iframe = document.createElement('iframe');
+    iframe.src = `${BASE}?id=${id}${PARAMS}`;
+    iframe.style.cssText = 'width:100%;height:100%;border:none;border-radius:6px;background:var(--bg);';
+    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups');
+    wrap.innerHTML = '';
+    wrap.appendChild(iframe);
+  }
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { loadEmbed(e.target); observer.unobserve(e.target); } });
+  }, { rootMargin: '200px' });
+
+  document.querySelectorAll('.x-embed-wrap').forEach(wrap => {
+    wrap.querySelector('.x-embed-placeholder')?.addEventListener('click', () => loadEmbed(wrap));
+    observer.observe(wrap);
+  });
+})();
+</script>
+{% endblock %}

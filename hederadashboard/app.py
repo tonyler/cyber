@@ -292,7 +292,7 @@ def _build_overview_stats(tasks: list) -> dict:
 
 def _prepare_content_posts(tasks: list) -> tuple:
     content = sorted([t for t in tasks if t.get('task_type') == 'content'],
-                     key=lambda t: _as_int(t.get('impressions')), reverse=True)
+                     key=lambda t: t.get('date') or '', reverse=True)
     for post in content:
         post["display_title"] = (post.get("title") or post.get("content") or
                                   post.get("description") or post.get("target_url") or "Untitled")
